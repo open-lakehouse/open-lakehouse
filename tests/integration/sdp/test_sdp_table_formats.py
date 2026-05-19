@@ -7,9 +7,10 @@ They will be skipped if the table format extensions fail to load.
 """
 
 import os
-import pytest
-import tempfile
 import shutil
+import tempfile
+
+import pytest
 
 pytestmark = [pytest.mark.sdp, pytest.mark.table_formats, pytest.mark.integration]
 
@@ -18,9 +19,13 @@ def iceberg_available(spark) -> bool:
     """Check if Iceberg is properly configured."""
     try:
         # Try to create a test catalog
-        spark.conf.set("spark.sql.catalog.iceberg_check", "org.apache.iceberg.spark.SparkCatalog")
+        spark.conf.set(
+            "spark.sql.catalog.iceberg_check", "org.apache.iceberg.spark.SparkCatalog"
+        )
         spark.conf.set("spark.sql.catalog.iceberg_check.type", "hadoop")
-        spark.conf.set("spark.sql.catalog.iceberg_check.warehouse", "/tmp/iceberg_check")
+        spark.conf.set(
+            "spark.sql.catalog.iceberg_check.warehouse", "/tmp/iceberg_check"
+        )
         spark.sql("CREATE NAMESPACE IF NOT EXISTS iceberg_check.test_ns")
         return True
     except Exception:
@@ -47,9 +52,7 @@ class TestIcebergFormat:
 
     def test_iceberg_create_table(self, spark_with_iceberg):
         """Test creating Iceberg table."""
-        df = spark_with_iceberg.createDataFrame(
-            [(1, "a"), (2, "b")], ["id", "name"]
-        )
+        df = spark_with_iceberg.createDataFrame([(1, "a"), (2, "b")], ["id", "name"])
 
         df.writeTo("test_iceberg.sdp_tests.create_table_test").using(
             "iceberg"
@@ -88,15 +91,18 @@ class TestIcebergFormat:
 
     def test_iceberg_partitioned_table(self, spark_with_iceberg):
         """Test Iceberg partitioned table."""
-        df = spark_with_iceberg.createDataFrame([
-            (1, "a", "2024-01-01"),
-            (2, "b", "2024-01-02"),
-            (3, "c", "2024-01-01"),
-        ], ["id", "name", "date"])
+        df = spark_with_iceberg.createDataFrame(
+            [
+                (1, "a", "2024-01-01"),
+                (2, "b", "2024-01-02"),
+                (3, "c", "2024-01-01"),
+            ],
+            ["id", "name", "date"],
+        )
 
-        df.writeTo("test_iceberg.sdp_tests.partitioned_test").using("iceberg").partitionedBy(
-            "date"
-        ).createOrReplace()
+        df.writeTo("test_iceberg.sdp_tests.partitioned_test").using(
+            "iceberg"
+        ).partitionedBy("date").createOrReplace()
 
         result = spark_with_iceberg.table("test_iceberg.sdp_tests.partitioned_test")
         assert result.count() == 3
@@ -113,7 +119,9 @@ class TestIcebergFormat:
             "ALTER TABLE test_iceberg.sdp_tests.schema_evolve_test ADD COLUMN value INT"
         )
 
-        df2 = spark_with_iceberg.createDataFrame([(2, "b", 100)], ["id", "name", "value"])
+        df2 = spark_with_iceberg.createDataFrame(
+            [(2, "b", 100)], ["id", "name", "value"]
+        )
         df2.writeTo("test_iceberg.sdp_tests.schema_evolve_test").append()
 
         result = spark_with_iceberg.table("test_iceberg.sdp_tests.schema_evolve_test")
@@ -138,9 +146,8 @@ class TestIcebergFormat:
         df2.writeTo("test_iceberg.sdp_tests.time_travel_test").append()
 
         # Query old snapshot
-        old_data = (
-            spark_with_iceberg.read.option("snapshot-id", snapshot_id)
-            .table("test_iceberg.sdp_tests.time_travel_test")
+        old_data = spark_with_iceberg.read.option("snapshot-id", snapshot_id).table(
+            "test_iceberg.sdp_tests.time_travel_test"
         )
         assert old_data.count() == 1
 
@@ -234,10 +241,13 @@ class TestDeltaFormat:
 
     def test_delta_partitioned(self, spark_with_delta):
         """Test Delta partitioned table."""
-        df = spark_with_delta.createDataFrame([
-            (1, "a", "2024-01-01"),
-            (2, "b", "2024-01-02"),
-        ], ["id", "name", "date"])
+        df = spark_with_delta.createDataFrame(
+            [
+                (1, "a", "2024-01-01"),
+                (2, "b", "2024-01-02"),
+            ],
+            ["id", "name", "date"],
+        )
         path = os.path.join(self.temp_dir, "partitioned")
 
         df.write.format("delta").partitionBy("date").mode("overwrite").save(path)

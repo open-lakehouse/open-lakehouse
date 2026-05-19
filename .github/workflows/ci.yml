@@ -11,6 +11,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Default permissions: read-only. Individual jobs can request more via their
+# own `permissions:` block if they truly need write access.
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint & validate

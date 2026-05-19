@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures for lakehouse-stack tests."""
 
 import os
+
 import pytest
 from pyspark.sql import SparkSession
 

@@ -21,11 +21,11 @@ from typing import Any
 from pyspark import pipelines as dp
 from pyspark.sql import functions as f
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    IntegerType,
     DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
 )
 
 # spark is injected by the Spark Declarative Pipelines framework at runtime
@@ -66,8 +66,7 @@ def orders_batch():
     """Order lifecycle events from batch parquet source."""
     df = spark.read.parquet("/data/events/orders_90d.parquet")
     return df.withColumn(
-        "event_timestamp",
-        f.to_timestamp(f.regexp_replace("ts", "T", " "))
+        "event_timestamp", f.to_timestamp(f.regexp_replace("ts", "T", " "))
     )
 
 
@@ -75,20 +74,21 @@ def orders_batch():
 @dp.table(name="bronze.orders_streaming")
 def orders_streaming():
     """Order lifecycle events from Kafka stream."""
-    event_schema = StructType([
-        StructField("event_id", StringType()),
-        StructField("event_type", StringType()),
-        StructField("ts", StringType()),
-        StructField("ts_seconds", IntegerType()),
-        StructField("order_id", StringType()),
-        StructField("location_id", IntegerType()),
-        StructField("sequence", IntegerType()),
-        StructField("body", StringType()),
-    ])
+    event_schema = StructType(
+        [
+            StructField("event_id", StringType()),
+            StructField("event_type", StringType()),
+            StructField("ts", StringType()),
+            StructField("ts_seconds", IntegerType()),
+            StructField("order_id", StringType()),
+            StructField("location_id", IntegerType()),
+            StructField("sequence", IntegerType()),
+            StructField("body", StringType()),
+        ]
+    )
 
     kafka_df = (
-        spark.readStream
-        .format("kafka")
+        spark.readStream.format("kafka")
         .option("kafka.bootstrap.servers", "localhost:9092")
         .option("subscribe", "orders")
         .option("startingOffsets", "latest")
@@ -104,8 +104,7 @@ def orders_streaming():
     )
 
     return parsed.withColumn(
-        "event_timestamp",
-        f.to_timestamp(f.regexp_replace("ts", "T", " "))
+        "event_timestamp", f.to_timestamp(f.regexp_replace("ts", "T", " "))
     )
 
 
@@ -128,20 +127,22 @@ def orders_enriched():
 
     # Filter nulls
     cleaned = orders.filter(
-        f.col("event_id").isNotNull() &
-        f.col("order_id").isNotNull() &
-        f.col("event_timestamp").isNotNull()
+        f.col("event_id").isNotNull()
+        & f.col("order_id").isNotNull()
+        & f.col("event_timestamp").isNotNull()
     )
 
     # Parse JSON body
-    body_schema = StructType([
-        StructField("brand_id", IntegerType()),
-        StructField("item_ids", StringType()),
-        StructField("total", DoubleType()),
-        StructField("lat", DoubleType()),
-        StructField("lng", DoubleType()),
-        StructField("driver_id", StringType()),
-    ])
+    body_schema = StructType(
+        [
+            StructField("brand_id", IntegerType()),
+            StructField("item_ids", StringType()),
+            StructField("total", DoubleType()),
+            StructField("lat", DoubleType()),
+            StructField("lng", DoubleType()),
+            StructField("driver_id", StringType()),
+        ]
+    )
 
     enriched = cleaned.withColumn("body_parsed", f.from_json("body", body_schema))
 
@@ -164,12 +165,16 @@ def orders_enriched():
     )
 
     # Add time features
-    enriched = enriched.withColumns({
-        "event_hour": f.hour("event_timestamp"),
-        "event_day_of_week": f.dayofweek("event_timestamp"),
-        "is_weekend": f.when(f.dayofweek("event_timestamp").isin(1, 7), True).otherwise(False),
-        "event_date": f.to_date("event_timestamp"),
-    })
+    enriched = enriched.withColumns(
+        {
+            "event_hour": f.hour("event_timestamp"),
+            "event_day_of_week": f.dayofweek("event_timestamp"),
+            "is_weekend": f.when(
+                f.dayofweek("event_timestamp").isin(1, 7), True
+            ).otherwise(False),
+            "event_date": f.to_date("event_timestamp"),
+        }
+    )
 
     # Join with locations
     locations = spark.table("iceberg.bronze.dim_locations").select(
@@ -192,11 +197,22 @@ def order_lifecycle():
     orders = spark.table("iceberg.silver.orders_enriched")
 
     # Pivot to get one row per order with timestamps for each event type
-    lifecycle = orders.groupBy("order_id", "location_id", "city_name").pivot(
-        "event_type",
-        ["order_created", "kitchen_started", "kitchen_finished", "order_ready",
-         "driver_arrived", "driver_picked_up", "delivered"]
-    ).agg(f.min("event_timestamp").alias("ts"))
+    lifecycle = (
+        orders.groupBy("order_id", "location_id", "city_name")
+        .pivot(
+            "event_type",
+            [
+                "order_created",
+                "kitchen_started",
+                "kitchen_finished",
+                "order_ready",
+                "driver_arrived",
+                "driver_picked_up",
+                "delivered",
+            ],
+        )
+        .agg(f.min("event_timestamp").alias("ts"))
+    )
 
     # Rename columns
     lifecycle = lifecycle.select(
@@ -213,17 +229,23 @@ def order_lifecycle():
     )
 
     # Calculate durations
-    lifecycle = lifecycle.withColumns({
-        "kitchen_duration_min": (
-            f.unix_timestamp("kitchen_finished_at") - f.unix_timestamp("kitchen_started_at")
-        ) / 60,
-        "delivery_duration_min": (
-            f.unix_timestamp("delivered_at") - f.unix_timestamp("pickup_at")
-        ) / 60,
-        "total_duration_min": (
-            f.unix_timestamp("delivered_at") - f.unix_timestamp("created_at")
-        ) / 60,
-    })
+    lifecycle = lifecycle.withColumns(
+        {
+            "kitchen_duration_min": (
+                f.unix_timestamp("kitchen_finished_at")
+                - f.unix_timestamp("kitchen_started_at")
+            )
+            / 60,
+            "delivery_duration_min": (
+                f.unix_timestamp("delivered_at") - f.unix_timestamp("pickup_at")
+            )
+            / 60,
+            "total_duration_min": (
+                f.unix_timestamp("delivered_at") - f.unix_timestamp("created_at")
+            )
+            / 60,
+        }
+    )
 
     # Only completed orders
     return lifecycle.filter(f.col("delivered_at").isNotNull())
@@ -242,18 +264,20 @@ def hourly_metrics():
     """
     orders = spark.table("iceberg.silver.orders_enriched")
 
-    return orders.filter(
-        f.col("event_type") == "order_created"
-    ).groupBy(
-        "event_date",
-        "event_hour",
-        "location_id",
-        "city_name",
-    ).agg(
-        f.count("order_id").alias("order_count"),
-        f.sum("order_total").alias("total_revenue"),
-        f.avg("order_total").alias("avg_order_value"),
-        f.countDistinct("brand_id").alias("unique_brands"),
+    return (
+        orders.filter(f.col("event_type") == "order_created")
+        .groupBy(
+            "event_date",
+            "event_hour",
+            "location_id",
+            "city_name",
+        )
+        .agg(
+            f.count("order_id").alias("order_count"),
+            f.sum("order_total").alias("total_revenue"),
+            f.avg("order_total").alias("avg_order_value"),
+            f.countDistinct("brand_id").alias("unique_brands"),
+        )
     )
 
 
@@ -288,21 +312,21 @@ def brand_summary():
     orders = spark.table("iceberg.silver.orders_enriched")
     brands = spark.table("iceberg.bronze.dim_brands")
 
-    brand_metrics = orders.filter(
-        f.col("event_type") == "order_created"
-    ).groupBy("brand_id").agg(
-        f.count("order_id").alias("total_orders"),
-        f.sum("order_total").alias("total_revenue"),
-        f.avg("order_total").alias("avg_order_value"),
-        f.countDistinct("location_id").alias("locations_served"),
-        f.min("event_date").alias("first_order_date"),
-        f.max("event_date").alias("last_order_date"),
+    brand_metrics = (
+        orders.filter(f.col("event_type") == "order_created")
+        .groupBy("brand_id")
+        .agg(
+            f.count("order_id").alias("total_orders"),
+            f.sum("order_total").alias("total_revenue"),
+            f.avg("order_total").alias("avg_order_value"),
+            f.countDistinct("location_id").alias("locations_served"),
+            f.min("event_date").alias("first_order_date"),
+            f.max("event_date").alias("last_order_date"),
+        )
     )
 
     return brand_metrics.join(
-        brands.select(f.col("id").alias("brand_id"), "name"),
-        on="brand_id",
-        how="left"
+        brands.select(f.col("id").alias("brand_id"), "name"), on="brand_id", how="left"
     ).select(
         "brand_id",
         f.col("name").alias("brand_name"),

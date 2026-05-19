@@ -8,8 +8,9 @@ These tests verify the full data pipeline works end-to-end.
 """
 
 import subprocess
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -30,9 +31,7 @@ class TestFullStackScripts:
             pytest.skip("test-full-stack.py not found")
 
         result = subprocess.run(
-            ["python3", "-m", "py_compile", str(script)],
-            capture_output=True,
-            text=True
+            ["python3", "-m", "py_compile", str(script)], capture_output=True, text=True
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -50,8 +49,11 @@ class TestFullStackScripts:
         assert "iceberg" in content.lower(), "Should test Iceberg"
         assert "postgres" in content.lower(), "Should test PostgreSQL"
         # SeaweedFS may be implicit via S3
-        assert "s3" in content.lower() or "seaweed" in content.lower() or "storage" in content.lower(), \
-            "Should reference storage layer"
+        assert (
+            "s3" in content.lower()
+            or "seaweed" in content.lower()
+            or "storage" in content.lower()
+        ), "Should reference storage layer"
 
 
 class TestStreamingScripts:
@@ -69,9 +71,7 @@ class TestStreamingScripts:
             pytest.skip("test-streaming-iceberg.py not found")
 
         result = subprocess.run(
-            ["python3", "-m", "py_compile", str(script)],
-            capture_output=True,
-            text=True
+            ["python3", "-m", "py_compile", str(script)], capture_output=True, text=True
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -112,10 +112,18 @@ class TestMedallionArchitecture:
         content = script.read_text()
 
         # Should have data transformations
-        has_transform = any(kw in content for kw in [
-            "to_timestamp", "GROUP BY", "SUM(", "COUNT(", "AVG(",
-            "transformation", "aggregat"
-        ])
+        has_transform = any(
+            kw in content
+            for kw in [
+                "to_timestamp",
+                "GROUP BY",
+                "SUM(",
+                "COUNT(",
+                "AVG(",
+                "transformation",
+                "aggregat",
+            ]
+        )
         assert has_transform, "Should have data transformations"
 
 
@@ -131,9 +139,10 @@ class TestDataConsistency:
         content = script.read_text()
 
         # Should verify data across layers
-        has_consistency = any(kw in content.lower() for kw in [
-            "consistency", "verify", "match", "compare", "count"
-        ])
+        has_consistency = any(
+            kw in content.lower()
+            for kw in ["consistency", "verify", "match", "compare", "count"]
+        )
         assert has_consistency, "Should verify data consistency"
 
 
@@ -169,9 +178,9 @@ class TestFullStackLive:
         """Kafka should be accessible."""
         try:
             from kafka import KafkaConsumer
+
             consumer = KafkaConsumer(
-                bootstrap_servers='localhost:9092',
-                consumer_timeout_ms=1000
+                bootstrap_servers="localhost:9092", consumer_timeout_ms=1000
             )
             topics = consumer.topics()
             consumer.close()
@@ -185,12 +194,13 @@ class TestFullStackLive:
         """PostgreSQL should be accessible."""
         try:
             import psycopg2
+
             conn = psycopg2.connect(
                 host="localhost",
                 port=5432,
                 database="iceberg_catalog",
                 user="iceberg",
-                password="iceberg"
+                password="iceberg",
             )
             cursor = conn.cursor()
             cursor.execute("SELECT 1")

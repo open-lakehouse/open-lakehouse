@@ -4,9 +4,8 @@ Tests: Parquet, JSON, CSV, ORC, Avro, Text
 """
 
 import os
-import pytest
-from pyspark.sql import functions as f
 
+import pytest
 
 pytestmark = [pytest.mark.sdp, pytest.mark.file_formats]
 
@@ -36,8 +35,12 @@ class TestParquetFormat:
 
         df = spark.read.parquet(path)
         # Check column names and types match (nullable may differ)
-        assert [f.name for f in df.schema.fields] == [f.name for f in sample_df.schema.fields]
-        assert [f.dataType for f in df.schema.fields] == [f.dataType for f in sample_df.schema.fields]
+        assert [f.name for f in df.schema.fields] == [
+            f.name for f in sample_df.schema.fields
+        ]
+        assert [f.dataType for f in df.schema.fields] == [
+            f.dataType for f in sample_df.schema.fields
+        ]
 
     def test_parquet_compression(self, spark, sample_df, temp_data_dir):
         """Test Parquet compression options."""
@@ -56,12 +59,15 @@ class TestParquetFormat:
         """Test partitioned Parquet writes."""
         path = os.path.join(temp_data_dir, "partitioned.parquet")
 
-        df = spark.createDataFrame([
-            (1, "a", 100),
-            (2, "a", 200),
-            (3, "b", 300),
-            (4, "b", 400),
-        ], ["id", "category", "value"])
+        df = spark.createDataFrame(
+            [
+                (1, "a", 100),
+                (2, "a", 200),
+                (3, "b", 300),
+                (4, "b", 400),
+            ],
+            ["id", "category", "value"],
+        )
 
         df.write.mode("overwrite").partitionBy("category").parquet(path)
 
@@ -134,16 +140,18 @@ class TestCSVFormat:
 
     def test_csv_with_explicit_schema(self, spark, sample_df, temp_data_dir):
         """Test reading CSV with explicit schema."""
-        from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+        from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
         path = os.path.join(temp_data_dir, "schema_test.csv")
         sample_df.write.mode("overwrite").option("header", "true").csv(path)
 
-        schema = StructType([
-            StructField("id", IntegerType()),
-            StructField("name", StringType()),
-            StructField("value", IntegerType()),
-        ])
+        schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("name", StringType()),
+                StructField("value", IntegerType()),
+            ]
+        )
 
         df = spark.read.option("header", "true").schema(schema).csv(path)
         assert df.count() == 5
@@ -156,9 +164,12 @@ class TestCSVFormat:
             "delimiter", "\t"
         ).csv(path)
 
-        df = spark.read.option("header", "true").option("delimiter", "\t").option(
-            "inferSchema", "true"
-        ).csv(path)
+        df = (
+            spark.read.option("header", "true")
+            .option("delimiter", "\t")
+            .option("inferSchema", "true")
+            .csv(path)
+        )
         assert df.count() == 5
 
 
@@ -184,9 +195,9 @@ class TestORCFormat:
         """Test ORC compression options."""
         for compression in ["snappy", "zlib"]:
             path = os.path.join(temp_data_dir, f"compress_{compression}.orc")
-            sample_df.write.mode("overwrite").option(
-                "compression", compression
-            ).orc(path)
+            sample_df.write.mode("overwrite").option("compression", compression).orc(
+                path
+            )
             assert os.path.exists(path)
 
     def test_orc_schema_preserved(self, spark, sample_df, temp_data_dir):
@@ -196,8 +207,12 @@ class TestORCFormat:
 
         df = spark.read.orc(path)
         # Check column names and types match (nullable may differ)
-        assert [f.name for f in df.schema.fields] == [f.name for f in sample_df.schema.fields]
-        assert [f.dataType for f in df.schema.fields] == [f.dataType for f in sample_df.schema.fields]
+        assert [f.name for f in df.schema.fields] == [
+            f.name for f in sample_df.schema.fields
+        ]
+        assert [f.dataType for f in df.schema.fields] == [
+            f.dataType for f in sample_df.schema.fields
+        ]
 
 
 class TestTextFormat:
@@ -213,9 +228,7 @@ class TestTextFormat:
     def test_read_text(self, spark, temp_data_dir):
         """Test reading text files."""
         path = os.path.join(temp_data_dir, "read_test.txt")
-        df = spark.createDataFrame(
-            [("hello world",), ("goodbye world",)], ["value"]
-        )
+        df = spark.createDataFrame([("hello world",), ("goodbye world",)], ["value"])
         df.write.mode("overwrite").text(path)
 
         result = spark.read.text(path)

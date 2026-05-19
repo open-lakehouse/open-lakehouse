@@ -12,10 +12,20 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class TestTopLevel:
     def test_lakehouse_cli_exists(self):
         cli = PROJECT_ROOT / "lakehouse"
-        assert cli.exists() and os.access(cli, os.X_OK), "lakehouse CLI missing or not executable"
+        assert cli.exists() and os.access(
+            cli, os.X_OK
+        ), "lakehouse CLI missing or not executable"
 
     def test_required_root_files(self):
-        for name in ("README.md", "LICENSE", "NOTICE", "SECURITY.md", "CLAUDE.md", "AGENTS.md", "pyproject.toml"):
+        for name in (
+            "README.md",
+            "LICENSE",
+            "NOTICE",
+            "SECURITY.md",
+            "CLAUDE.md",
+            "AGENTS.md",
+            "pyproject.toml",
+        ):
             assert (PROJECT_ROOT / name).exists(), f"missing root file: {name}"
 
 
@@ -34,8 +44,11 @@ class TestComposeFiles:
             assert (PROJECT_ROOT / name).exists(), f"missing compose file: {name}"
 
     def test_spark_40_compose_absent(self):
-        assert not (PROJECT_ROOT / "docker-compose.yml").exists(), \
+        assert not (
+            PROJECT_ROOT / "docker-compose.yml"
+        ).exists(), (
             "docker-compose.yml (Spark 4.0) should not exist in Spark-4.1-only repo"
+        )
 
 
 class TestDirectories:
@@ -74,8 +87,9 @@ class TestDirectories:
             "airflow-orchestration",
         )
         for d in dropped:
-            assert not (PROJECT_ROOT / "demos" / d).exists(), \
-                f"old demo dir should not exist: demos/{d}"
+            assert not (
+                PROJECT_ROOT / "demos" / d
+            ).exists(), f"old demo dir should not exist: demos/{d}"
 
 
 class TestConnectFirst:
@@ -94,7 +108,9 @@ class TestConnectFirst:
 
     def test_local_mode_demo_placeholder_exists(self):
         readme = PROJECT_ROOT / "demos" / "local-mode-spark" / "README.md"
-        assert readme.exists(), "demos/local-mode-spark/README.md must back the CLI message"
+        assert (
+            readme.exists()
+        ), "demos/local-mode-spark/README.md must back the CLI message"
         content = readme.read_text()
         assert "NOT YET IMPLEMENTED" in content, "Placeholder must flag deferred state"
 

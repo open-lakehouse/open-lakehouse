@@ -6,6 +6,7 @@ can successfully bootstrap all required components.
 
 import os
 import subprocess
+
 import pytest
 
 
@@ -149,7 +150,14 @@ class TestDockerComposeValidation:
     def test_compose_kafka_valid(self, project_root):
         """Validate docker-compose-kafka.yml syntax."""
         result = subprocess.run(
-            ["docker", "compose", "-f", "docker-compose-kafka.yml", "config", "--quiet"],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker-compose-kafka.yml",
+                "config",
+                "--quiet",
+            ],
             cwd=project_root,
             capture_output=True,
             text=True,
@@ -193,9 +201,9 @@ class TestJARDownloadScript:
         with open(script_path, "r") as f:
             content = f.read()
 
-        assert "retry" in content.lower() or "attempt" in content.lower(), (
-            "Missing retry logic"
-        )
+        assert (
+            "retry" in content.lower() or "attempt" in content.lower()
+        ), "Missing retry logic"
 
 
 @pytest.mark.integration

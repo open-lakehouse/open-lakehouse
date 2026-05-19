@@ -71,24 +71,26 @@ def inject_malformed_json(event: dict) -> dict:
     """Corrupt the body JSON to be malformed."""
     body = event.get("body", "{}")
 
-    corruption_type = random.choice([
-        "truncate",
-        "missing_brace",
-        "missing_quote",
-        "extra_comma",
-    ])
+    corruption_type = random.choice(
+        [
+            "truncate",
+            "missing_brace",
+            "missing_quote",
+            "extra_comma",
+        ]
+    )
 
     if corruption_type == "truncate":
         # Truncate the JSON
         if len(body) > 10:
-            event["body"] = body[:len(body) // 2]
+            event["body"] = body[: len(body) // 2]
     elif corruption_type == "missing_brace":
         # Remove closing brace
         if body.endswith("}"):
             event["body"] = body[:-1]
     elif corruption_type == "missing_quote":
         # Remove a quote
-        event["body"] = body.replace('"', '', 1)
+        event["body"] = body.replace('"', "", 1)
     elif corruption_type == "extra_comma":
         # Add trailing comma
         if body.endswith("}"):
@@ -158,8 +160,7 @@ class ChaosMonkey:
         # First, check if any delayed events should now be released
         current_ts = event.get("ts_seconds", 0)
         ready_delayed = [
-            e for e in self.delayed_events
-            if e.get("_release_at", 0) <= current_ts
+            e for e in self.delayed_events if e.get("_release_at", 0) <= current_ts
         ]
         for e in ready_delayed:
             self.delayed_events.remove(e)

@@ -21,21 +21,19 @@ Usage:
     docker exec spark-master-41 /opt/spark/bin/spark-submit /scripts/test-unity-catalog-live.py
 """
 
-import sys
-import json
 import subprocess
+import sys
 from datetime import datetime
 
 try:
     import requests
+
     REQUESTS_AVAILABLE = True
 except ImportError:
     REQUESTS_AVAILABLE = False
     print("Warning: requests not installed. Using curl fallback.")
 
 from pyspark.sql import SparkSession
-from pyspark.sql import functions as f
-
 
 # Configuration
 UC_HOST = "localhost"
@@ -63,8 +61,8 @@ def check_uc_health():
             response = requests.get(url, timeout=5)
             if response.status_code == 200:
                 data = response.json()
-                catalogs = data.get('catalogs', [])
-                print(f"  Unity Catalog is running")
+                catalogs = data.get("catalogs", [])
+                print("  Unity Catalog is running")
                 print(f"  Catalogs: {[c.get('name') for c in catalogs]}")
                 print("  ✅ Health check passed")
                 return True
@@ -85,7 +83,7 @@ def check_uc_health():
                 ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", url],
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
             if result.stdout == "200":
                 print("  ✅ Unity Catalog is running (curl check)")
@@ -112,11 +110,11 @@ def test_rest_api_operations():
         # List catalogs
         print("  Listing catalogs...")
         response = requests.get(f"{UC_API_URL}/catalogs")
-        catalogs = response.json().get('catalogs', [])
+        catalogs = response.json().get("catalogs", [])
         print(f"    Found {len(catalogs)} catalog(s)")
 
         # Check if unity catalog exists
-        unity_exists = any(c.get('name') == TEST_CATALOG for c in catalogs)
+        unity_exists = any(c.get("name") == TEST_CATALOG for c in catalogs)
         if not unity_exists:
             print(f"    Creating catalog: {TEST_CATALOG}")
             requests.post(f"{UC_API_URL}/catalogs", json={"name": TEST_CATALOG})
@@ -124,10 +122,13 @@ def test_rest_api_operations():
         # Create schema
         print(f"  Creating schema: {TEST_SCHEMA}")
         schema_url = f"{UC_API_URL}/schemas"
-        response = requests.post(schema_url, json={
-            "name": TEST_SCHEMA,
-            "catalog_name": TEST_CATALOG,
-        })
+        response = requests.post(
+            schema_url,
+            json={
+                "name": TEST_SCHEMA,
+                "catalog_name": TEST_CATALOG,
+            },
+        )
         if response.status_code in (200, 201, 409):  # 409 = already exists
             print(f"    Schema created/exists: {TEST_CATALOG}.{TEST_SCHEMA}")
         else:
@@ -136,7 +137,7 @@ def test_rest_api_operations():
         # List schemas
         print("  Listing schemas...")
         response = requests.get(f"{UC_API_URL}/schemas?catalog_name={TEST_CATALOG}")
-        schemas = response.json().get('schemas', [])
+        schemas = response.json().get("schemas", [])
         print(f"    Schemas in {TEST_CATALOG}: {[s.get('name') for s in schemas]}")
 
         print("  ✅ REST API operations successful")
@@ -162,15 +163,20 @@ def test_spark_with_uc(spark):
             print("     Attempting to configure...")
 
             # Try to configure Spark for UC
-            spark.conf.set("spark.sql.catalog.uc", "org.apache.iceberg.spark.SparkCatalog")
-            spark.conf.set("spark.sql.catalog.uc.catalog-impl", "org.apache.iceberg.rest.RESTCatalog")
+            spark.conf.set(
+                "spark.sql.catalog.uc", "org.apache.iceberg.spark.SparkCatalog"
+            )
+            spark.conf.set(
+                "spark.sql.catalog.uc.catalog-impl",
+                "org.apache.iceberg.rest.RESTCatalog",
+            )
             spark.conf.set("spark.sql.catalog.uc.uri", UC_ICEBERG_URL)
             spark.conf.set("spark.sql.catalog.uc.warehouse", TEST_CATALOG)
             spark.conf.set("spark.sql.catalog.uc.token", "not_used")
             catalog_name = "uc"
         else:
             catalog_name = "iceberg"
-            print(f"  Spark configured with RESTCatalog")
+            print("  Spark configured with RESTCatalog")
 
         # Create namespace
         print(f"  Creating namespace: {catalog_name}.{TEST_SCHEMA}")
@@ -200,7 +206,9 @@ def test_spark_with_uc(spark):
 
         # Query data
         print("  Querying data...")
-        count = spark.sql(f"SELECT COUNT(*) FROM {catalog_name}.{TEST_SCHEMA}.{TEST_TABLE}").collect()[0][0]
+        count = spark.sql(
+            f"SELECT COUNT(*) FROM {catalog_name}.{TEST_SCHEMA}.{TEST_TABLE}"
+        ).collect()[0][0]
         print(f"    Row count: {count}")
 
         spark.sql(f"SELECT * FROM {catalog_name}.{TEST_SCHEMA}.{TEST_TABLE}").show()
@@ -215,6 +223,7 @@ def test_spark_with_uc(spark):
     except Exception as e:
         print(f"  ❌ Spark with Unity Catalog failed: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -231,12 +240,14 @@ def test_table_via_rest():
 
     try:
         # List tables in schema
-        url = f"{UC_API_URL}/tables?catalog_name={TEST_CATALOG}&schema_name={TEST_SCHEMA}"
+        url = (
+            f"{UC_API_URL}/tables?catalog_name={TEST_CATALOG}&schema_name={TEST_SCHEMA}"
+        )
         response = requests.get(url)
 
         if response.status_code == 200:
-            tables = response.json().get('tables', [])
-            table_names = [t.get('name') for t in tables]
+            tables = response.json().get("tables", [])
+            table_names = [t.get("name") for t in tables]
             print(f"  Tables in {TEST_CATALOG}.{TEST_SCHEMA}: {table_names}")
 
             if TEST_TABLE in table_names:
@@ -313,13 +324,15 @@ def test_schema_evolution(spark, catalog_name):
 
         # Verify column added
         columns = spark.sql(f"DESCRIBE {table_ref}").collect()
-        col_names = [c['col_name'] for c in columns]
+        col_names = [c["col_name"] for c in columns]
         print(f"    Columns: {col_names}")
 
-        if 'status' in col_names:
+        if "status" in col_names:
             # Update with new column
             print("  Updating records with status...")
-            spark.sql(f"UPDATE {table_ref} SET status = 'completed' WHERE order_id = 'UC-001'")
+            spark.sql(
+                f"UPDATE {table_ref} SET status = 'completed' WHERE order_id = 'UC-001'"
+            )
             spark.sql(f"UPDATE {table_ref} SET status = 'pending' WHERE status IS NULL")
 
             spark.sql(f"SELECT order_id, product, status FROM {table_ref}").show()
@@ -368,31 +381,29 @@ def main():
     print("=" * 60)
 
     # Initialize Spark
-    spark = SparkSession.builder \
-        .appName("UnityCatalog-Live-Test") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("UnityCatalog-Live-Test").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
     results = {}
     catalog_name = None
 
     # Run tests
-    results['health_check'] = check_uc_health()
+    results["health_check"] = check_uc_health()
 
-    if not results['health_check']:
+    if not results["health_check"]:
         print("\n❌ Unity Catalog not available. Skipping remaining tests.")
         print("   Start Unity Catalog with: ./lakehouse start unity-catalog")
         sys.exit(1)
 
-    results['rest_api'] = test_rest_api_operations()
+    results["rest_api"] = test_rest_api_operations()
     catalog_name = test_spark_with_uc(spark)
-    results['spark_uc'] = catalog_name is not None
-    results['rest_verify'] = test_table_via_rest()
-    results['iceberg_metadata'] = test_iceberg_metadata(spark, catalog_name)
-    results['schema_evolution'] = test_schema_evolution(spark, catalog_name)
+    results["spark_uc"] = catalog_name is not None
+    results["rest_verify"] = test_table_via_rest()
+    results["iceberg_metadata"] = test_iceberg_metadata(spark, catalog_name)
+    results["schema_evolution"] = test_schema_evolution(spark, catalog_name)
 
     # Cleanup
-    if '--no-cleanup' not in sys.argv:
+    if "--no-cleanup" not in sys.argv:
         cleanup(spark, catalog_name)
 
     # Summary

@@ -3,10 +3,10 @@
 Tests Kafka message production and consumption with Spark Structured Streaming.
 """
 
-import pytest
 import json
 import time
-from typing import Generator
+
+import pytest
 
 
 @pytest.mark.integration
@@ -48,7 +48,7 @@ class TestKafkaConnectivity:
     def test_produce_consume_message(self, kafka_container):
         """Test producing and consuming a message."""
         try:
-            from kafka import KafkaProducer, KafkaConsumer
+            from kafka import KafkaConsumer, KafkaProducer
         except ImportError:
             pytest.skip("kafka-python not installed")
 

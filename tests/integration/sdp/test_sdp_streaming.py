@@ -5,10 +5,11 @@ Note: File-based streaming tests may be flaky in local test environments.
 """
 
 import os
-import pytest
 import time
+
+import pytest
 from pyspark.sql import functions as f
-from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
 pytestmark = [pytest.mark.sdp, pytest.mark.streaming, pytest.mark.integration]
 
@@ -74,10 +75,12 @@ class TestStreamingAPI:
     def test_streaming_schema_required(self, spark, tmp_path):
         """Verify streaming requires explicit schema."""
         # This is a documentation test - streaming requires schema
-        schema = StructType([
-            StructField("id", IntegerType(), True),
-            StructField("name", StringType(), True),
-        ])
+        schema = StructType(
+            [
+                StructField("id", IntegerType(), True),
+                StructField("name", StringType(), True),
+            ]
+        )
 
         # Create an empty directory for the streaming source
         input_dir = str(tmp_path / "stream_input")

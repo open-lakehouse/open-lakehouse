@@ -9,12 +9,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.testdata import (
-    GeneratorConfig,
     ChaosConfig,
+    GeneratorConfig,
     generate_dataset,
     stream_events,
-    save_dimensions,
-    export_events_to_parquet,
 )
 
 
@@ -69,6 +67,7 @@ def cmd_clean(args):
     for d in dirs_to_clean:
         if d.exists():
             import shutil
+
             shutil.rmtree(d)
             print(f"Removed: {d}")
 
@@ -99,7 +98,9 @@ def cmd_stats(args):
 
         print(f"Total events:  {stats['total_events']:,}")
         print(f"Unique orders: {stats['unique_orders']:,}")
-        print(f"Date range:    {stats['date_range']['min'][:10]} to {stats['date_range']['max'][:10]}")
+        print(
+            f"Date range:    {stats['date_range']['min'][:10]} to {stats['date_range']['max'][:10]}"
+        )
 
         print("\nEvents by type:")
         for event_type, count in sorted(stats["event_types"].items()):
@@ -134,24 +135,44 @@ Examples:
 
     # Generate command
     gen_parser = subparsers.add_parser("generate", help="Generate test data")
-    gen_parser.add_argument("--days", type=int, default=90, help="Number of days to generate")
+    gen_parser.add_argument(
+        "--days", type=int, default=90, help="Number of days to generate"
+    )
     gen_parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    gen_parser.add_argument("--orders-per-day", type=int, default=835, help="Base orders per day")
-    gen_parser.add_argument("--start-date", default="2024-01-01", help="Start date (YYYY-MM-DD)")
+    gen_parser.add_argument(
+        "--orders-per-day", type=int, default=835, help="Base orders per day"
+    )
+    gen_parser.add_argument(
+        "--start-date", default="2024-01-01", help="Start date (YYYY-MM-DD)"
+    )
     gen_parser.add_argument("--output", default="data", help="Output directory")
-    gen_parser.add_argument("--no-chaos", action="store_true", help="Disable chaos injection")
-    gen_parser.add_argument("--chaos-rate", type=float, default=0.05, help="Chaos injection rate")
+    gen_parser.add_argument(
+        "--no-chaos", action="store_true", help="Disable chaos injection"
+    )
+    gen_parser.add_argument(
+        "--chaos-rate", type=float, default=0.05, help="Chaos injection rate"
+    )
     gen_parser.set_defaults(func=cmd_generate)
 
     # Stream command
     stream_parser = subparsers.add_parser("stream", help="Stream events to Kafka")
-    stream_parser.add_argument("--speed", type=int, default=60, help="Speed multiplier (1=realtime)")
-    stream_parser.add_argument("--start-day", type=int, default=0, help="Day to start from")
-    stream_parser.add_argument("--kafka", default="localhost:9092", help="Kafka bootstrap servers")
+    stream_parser.add_argument(
+        "--speed", type=int, default=60, help="Speed multiplier (1=realtime)"
+    )
+    stream_parser.add_argument(
+        "--start-day", type=int, default=0, help="Day to start from"
+    )
+    stream_parser.add_argument(
+        "--kafka", default="localhost:9092", help="Kafka bootstrap servers"
+    )
     stream_parser.add_argument("--topic", default="orders", help="Kafka topic")
-    stream_parser.add_argument("--days", type=int, default=90, help="Days in generated file")
+    stream_parser.add_argument(
+        "--days", type=int, default=90, help="Days in generated file"
+    )
     stream_parser.add_argument("--output", default="data", help="Data directory")
-    stream_parser.add_argument("--no-chaos", action="store_true", help="Disable chaos during stream")
+    stream_parser.add_argument(
+        "--no-chaos", action="store_true", help="Disable chaos during stream"
+    )
     stream_parser.set_defaults(func=cmd_stream)
 
     # Clean command

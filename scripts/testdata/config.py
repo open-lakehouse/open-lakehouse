@@ -21,18 +21,47 @@ class DemandPattern:
     """Time-based demand weighting."""
 
     # Hour weights (0-23)
-    hour_weights: Dict[int, float] = field(default_factory=lambda: {
-        0: 0.1, 1: 0.05, 2: 0.02, 3: 0.01, 4: 0.01, 5: 0.05,
-        6: 0.2, 7: 0.3, 8: 0.4, 9: 0.5, 10: 0.6,
-        11: 0.9, 12: 1.0, 13: 0.9, 14: 0.5,
-        15: 0.4, 16: 0.5, 17: 0.8,
-        18: 1.0, 19: 1.0, 20: 0.9, 21: 0.6, 22: 0.4, 23: 0.2,
-    })
+    hour_weights: Dict[int, float] = field(
+        default_factory=lambda: {
+            0: 0.1,
+            1: 0.05,
+            2: 0.02,
+            3: 0.01,
+            4: 0.01,
+            5: 0.05,
+            6: 0.2,
+            7: 0.3,
+            8: 0.4,
+            9: 0.5,
+            10: 0.6,
+            11: 0.9,
+            12: 1.0,
+            13: 0.9,
+            14: 0.5,
+            15: 0.4,
+            16: 0.5,
+            17: 0.8,
+            18: 1.0,
+            19: 1.0,
+            20: 0.9,
+            21: 0.6,
+            22: 0.4,
+            23: 0.2,
+        }
+    )
 
     # Day of week multipliers (0=Monday, 6=Sunday)
-    day_multipliers: Dict[int, float] = field(default_factory=lambda: {
-        0: 1.0, 1: 1.0, 2: 1.0, 3: 1.0, 4: 1.25, 5: 1.35, 6: 1.15,
-    })
+    day_multipliers: Dict[int, float] = field(
+        default_factory=lambda: {
+            0: 1.0,
+            1: 1.0,
+            2: 1.0,
+            3: 1.0,
+            4: 1.25,
+            5: 1.35,
+            6: 1.15,
+        }
+    )
 
 
 @dataclass
@@ -80,40 +109,42 @@ class GeneratorConfig:
     chaos: ChaosConfig = field(default_factory=ChaosConfig)
 
     # Locations
-    locations: List[Location] = field(default_factory=lambda: [
-        Location(
-            id=1,
-            city="San Francisco",
-            lat=37.7749,
-            lon=-122.4194,
-            lat_range=(37.70, 37.82),
-            lon_range=(-122.52, -122.35),
-        ),
-        Location(
-            id=2,
-            city="Silicon Valley",
-            lat=37.3861,
-            lon=-122.0839,
-            lat_range=(37.30, 37.45),
-            lon_range=(-122.20, -121.95),
-        ),
-        Location(
-            id=3,
-            city="Seattle",
-            lat=47.6062,
-            lon=-122.3321,
-            lat_range=(47.50, 47.72),
-            lon_range=(-122.45, -122.25),
-        ),
-        Location(
-            id=4,
-            city="Austin",
-            lat=30.2672,
-            lon=-97.7431,
-            lat_range=(30.18, 30.40),
-            lon_range=(-97.85, -97.65),
-        ),
-    ])
+    locations: List[Location] = field(
+        default_factory=lambda: [
+            Location(
+                id=1,
+                city="San Francisco",
+                lat=37.7749,
+                lon=-122.4194,
+                lat_range=(37.70, 37.82),
+                lon_range=(-122.52, -122.35),
+            ),
+            Location(
+                id=2,
+                city="Silicon Valley",
+                lat=37.3861,
+                lon=-122.0839,
+                lat_range=(37.30, 37.45),
+                lon_range=(-122.20, -121.95),
+            ),
+            Location(
+                id=3,
+                city="Seattle",
+                lat=47.6062,
+                lon=-122.3321,
+                lat_range=(47.50, 47.72),
+                lon_range=(-122.45, -122.25),
+            ),
+            Location(
+                id=4,
+                city="Austin",
+                lat=30.2672,
+                lon=-97.7431,
+                lat_range=(30.18, 30.40),
+                lon_range=(-97.85, -97.65),
+            ),
+        ]
+    )
 
     # Output paths
     output_dir: str = "data"

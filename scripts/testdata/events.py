@@ -10,7 +10,7 @@ from typing import Generator, List, Tuple
 import numpy as np
 
 from .config import GeneratorConfig, Location
-from .dimensions import BRANDS, get_items, Brand, Item
+from .dimensions import BRANDS, Brand, Item, get_items
 
 
 @dataclass
@@ -62,10 +62,10 @@ def select_brand(brands: List[Brand], day: int) -> Brand:
         base = 1.0
         if brand.momentum == "growing":
             # Grow 0.5% per day
-            base *= (1.005 ** day)
+            base *= 1.005**day
         elif brand.momentum == "declining":
             # Decline 0.3% per day
-            base *= (0.997 ** day)
+            base *= 0.997**day
         weights.append(base)
 
     total = sum(weights)
@@ -117,82 +117,93 @@ def generate_order_events(
     kitchen_coords = (location.lat, location.lon)  # Kitchen at city center
 
     # Calculate route distance (simple haversine approximation)
-    route_distance_km = np.sqrt(
-        (customer_coords[0] - kitchen_coords[0]) ** 2 +
-        (customer_coords[1] - kitchen_coords[1]) ** 2
-    ) * 111  # Rough km per degree
+    route_distance_km = (
+        np.sqrt(
+            (customer_coords[0] - kitchen_coords[0]) ** 2
+            + (customer_coords[1] - kitchen_coords[1]) ** 2
+        )
+        * 111
+    )  # Rough km per degree
 
     st = config.service_times
     seq = 0
     current_time = order_time
 
     # Event 1: order_created
-    events.append(Event(
-        event_id=str(uuid.uuid4()),
-        event_type="order_created",
-        ts=current_time,
-        location_id=location.id,
-        order_id=order_id,
-        sequence=seq,
-        body={
-            "customer_lat": round(customer_coords[0], 6),
-            "customer_lon": round(customer_coords[1], 6),
-            "brand_id": brand.id,
-            "brand_name": brand.name,
-            "items": items,
-            "total": round(total, 2),
-        },
-    ))
+    events.append(
+        Event(
+            event_id=str(uuid.uuid4()),
+            event_type="order_created",
+            ts=current_time,
+            location_id=location.id,
+            order_id=order_id,
+            sequence=seq,
+            body={
+                "customer_lat": round(customer_coords[0], 6),
+                "customer_lon": round(customer_coords[1], 6),
+                "brand_id": brand.id,
+                "brand_name": brand.name,
+                "items": items,
+                "total": round(total, 2),
+            },
+        )
+    )
     seq += 1
 
     # Event 2: kitchen_started
     wait_mins = gaussian_time(*st.order_to_kitchen_start)
     current_time += timedelta(minutes=wait_mins)
     estimated_prep = brand.avg_prep_time_mins + random.randint(-3, 5)
-    events.append(Event(
-        event_id=str(uuid.uuid4()),
-        event_type="kitchen_started",
-        ts=current_time,
-        location_id=location.id,
-        order_id=order_id,
-        sequence=seq,
-        body={
-            "kitchen_id": f"K{location.id:02d}",
-            "estimated_prep_mins": estimated_prep,
-        },
-    ))
+    events.append(
+        Event(
+            event_id=str(uuid.uuid4()),
+            event_type="kitchen_started",
+            ts=current_time,
+            location_id=location.id,
+            order_id=order_id,
+            sequence=seq,
+            body={
+                "kitchen_id": f"K{location.id:02d}",
+                "estimated_prep_mins": estimated_prep,
+            },
+        )
+    )
     seq += 1
 
     # Event 3: kitchen_finished
     prep_mins = gaussian_time(*st.kitchen_prep)
     current_time += timedelta(minutes=prep_mins)
-    events.append(Event(
-        event_id=str(uuid.uuid4()),
-        event_type="kitchen_finished",
-        ts=current_time,
-        location_id=location.id,
-        order_id=order_id,
-        sequence=seq,
-        body={
-            "actual_prep_mins": round(prep_mins, 1),
-        },
-    ))
+    events.append(
+        Event(
+            event_id=str(uuid.uuid4()),
+            event_type="kitchen_finished",
+            ts=current_time,
+            location_id=location.id,
+            order_id=order_id,
+            sequence=seq,
+            body={
+                "actual_prep_mins": round(prep_mins, 1),
+            },
+        )
+    )
     seq += 1
 
     # Event 4: order_ready
     current_time += timedelta(seconds=30)  # Quick packaging
-    events.append(Event(
-        event_id=str(uuid.uuid4()),
-        event_type="order_ready",
-        ts=current_time,
-        location_id=location.id,
-        order_id=order_id,
-        sequence=seq,
-        body={
-            "pickup_lat": round(kitchen_coords[0], 6),
-            "pickup_lon": round(kitchen_coords[1], 6),
-        },
-    ))
+    events.append(
+        Event(
+            event_id=str(uuid.uuid4()),
+            event_type="order_ready",
+            ts=current_time,
+            location_id=location.id,
+            order_id=order_id,
+            sequence=seq,
+            body={
+                "pickup_lat": round(kitchen_coords[0], 6),
+                "pickup_lon": round(kitchen_coords[1], 6),
+            },
+        )
+    )
     seq += 1
 
     # Event 5: driver_arrived
@@ -200,33 +211,37 @@ def generate_order_events(
     current_time += timedelta(minutes=driver_wait_mins)
     driver_id = f"D{random.randint(1, 500):04d}"
     vehicle_type = random.choice(["car", "bike", "scooter"])
-    events.append(Event(
-        event_id=str(uuid.uuid4()),
-        event_type="driver_arrived",
-        ts=current_time,
-        location_id=location.id,
-        order_id=order_id,
-        sequence=seq,
-        body={
-            "driver_id": driver_id,
-            "vehicle_type": vehicle_type,
-        },
-    ))
+    events.append(
+        Event(
+            event_id=str(uuid.uuid4()),
+            event_type="driver_arrived",
+            ts=current_time,
+            location_id=location.id,
+            order_id=order_id,
+            sequence=seq,
+            body={
+                "driver_id": driver_id,
+                "vehicle_type": vehicle_type,
+            },
+        )
+    )
     seq += 1
 
     # Event 6: driver_picked_up
     current_time += timedelta(seconds=random.randint(30, 120))
-    events.append(Event(
-        event_id=str(uuid.uuid4()),
-        event_type="driver_picked_up",
-        ts=current_time,
-        location_id=location.id,
-        order_id=order_id,
-        sequence=seq,
-        body={
-            "route_distance_km": round(route_distance_km, 2),
-        },
-    ))
+    events.append(
+        Event(
+            event_id=str(uuid.uuid4()),
+            event_type="driver_picked_up",
+            ts=current_time,
+            location_id=location.id,
+            order_id=order_id,
+            sequence=seq,
+            body={
+                "route_distance_km": round(route_distance_km, 2),
+            },
+        )
+    )
     seq += 1
     pickup_time = current_time
 
@@ -242,37 +257,41 @@ def generate_order_events(
         ping_coords = interpolate_coords(kitchen_coords, customer_coords, progress)
 
         current_time = pickup_time + elapsed
-        events.append(Event(
-            event_id=str(uuid.uuid4()),
-            event_type="driver_ping",
-            ts=current_time,
-            location_id=location.id,
-            order_id=order_id,
-            sequence=seq,
-            body={
-                "lat": round(ping_coords[0], 6),
-                "lon": round(ping_coords[1], 6),
-                "progress_pct": round(progress * 100, 1),
-            },
-        ))
+        events.append(
+            Event(
+                event_id=str(uuid.uuid4()),
+                event_type="driver_ping",
+                ts=current_time,
+                location_id=location.id,
+                order_id=order_id,
+                sequence=seq,
+                body={
+                    "lat": round(ping_coords[0], 6),
+                    "lon": round(ping_coords[1], 6),
+                    "progress_pct": round(progress * 100, 1),
+                },
+            )
+        )
         seq += 1
 
     # Final event: delivered
     current_time = pickup_time + delivery_duration
     total_mins = (current_time - order_time).total_seconds() / 60
-    events.append(Event(
-        event_id=str(uuid.uuid4()),
-        event_type="delivered",
-        ts=current_time,
-        location_id=location.id,
-        order_id=order_id,
-        sequence=seq,
-        body={
-            "delivery_lat": round(customer_coords[0], 6),
-            "delivery_lon": round(customer_coords[1], 6),
-            "total_mins": round(total_mins, 1),
-        },
-    ))
+    events.append(
+        Event(
+            event_id=str(uuid.uuid4()),
+            event_type="delivered",
+            ts=current_time,
+            location_id=location.id,
+            order_id=order_id,
+            sequence=seq,
+            body={
+                "delivery_lat": round(customer_coords[0], 6),
+                "delivery_lon": round(customer_coords[1], 6),
+                "total_mins": round(total_mins, 1),
+            },
+        )
+    )
 
     return events
 
@@ -329,7 +348,9 @@ def generate_all_events(config: GeneratorConfig) -> Generator[Event, None, None]
 
         # Progress logging
         if (day + 1) % 10 == 0:
-            print(f"  Day {day + 1}/{config.days}: {total_orders:,} orders, {total_events:,} events")
+            print(
+                f"  Day {day + 1}/{config.days}: {total_orders:,} orders, {total_events:,} events"
+            )
 
 
 def event_to_dict(event: Event) -> dict:

@@ -2,15 +2,14 @@
 
 import json
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import pyarrow.parquet as pq
 from kafka import KafkaProducer
 
-from .config import GeneratorConfig, ChaosConfig
 from .chaos import ChaosMonkey
+from .config import GeneratorConfig
 
 
 class StreamingProducer:
@@ -113,7 +112,9 @@ class StreamingProducer:
                     elapsed = time.time() - start_real_time
                     rate = sent_count / elapsed if elapsed > 0 else 0
                     pct = (sent_count / total_events) * 100
-                    print(f"  Sent {sent_count:,}/{total_events:,} ({pct:.1f}%) - {rate:.0f} events/sec")
+                    print(
+                        f"  Sent {sent_count:,}/{total_events:,} ({pct:.1f}%) - {rate:.0f} events/sec"
+                    )
 
         # Flush remaining chaos events
         if self.chaos:
@@ -164,7 +165,7 @@ def stream_events(
 
 def stream_realtime(config: GeneratorConfig) -> None:
     """Generate and stream events in real-time (not from parquet)."""
-    from .events import generate_all_events, event_to_dict
+    from .events import event_to_dict, generate_all_events
 
     producer = KafkaProducer(
         bootstrap_servers=[config.kafka_bootstrap_servers],

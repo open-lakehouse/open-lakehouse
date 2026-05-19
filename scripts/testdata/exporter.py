@@ -6,9 +6,9 @@ from typing import List
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .config import GeneratorConfig
-from .events import generate_all_events, event_to_dict
 from .chaos import apply_chaos
+from .config import GeneratorConfig
+from .events import event_to_dict, generate_all_events
 
 
 def export_events_to_parquet(config: GeneratorConfig) -> dict:
@@ -26,16 +26,18 @@ def export_events_to_parquet(config: GeneratorConfig) -> dict:
     print()
 
     # Define schema
-    schema = pa.schema([
-        ("event_id", pa.string()),
-        ("event_type", pa.string()),
-        ("ts", pa.string()),
-        ("ts_seconds", pa.int64()),
-        ("location_id", pa.int32()),
-        ("order_id", pa.string()),
-        ("sequence", pa.int32()),
-        ("body", pa.string()),
-    ])
+    schema = pa.schema(
+        [
+            ("event_id", pa.string()),
+            ("event_type", pa.string()),
+            ("ts", pa.string()),
+            ("ts_seconds", pa.int64()),
+            ("location_id", pa.int32()),
+            ("order_id", pa.string()),
+            ("sequence", pa.int32()),
+            ("body", pa.string()),
+        ]
+    )
 
     # Write in batches using ParquetWriter
     batch_size = 50000
@@ -89,18 +91,25 @@ def export_events_to_parquet(config: GeneratorConfig) -> dict:
     }
 
 
-def _write_batch(writer: pq.ParquetWriter, batch: List[dict], schema: pa.Schema) -> None:
+def _write_batch(
+    writer: pq.ParquetWriter, batch: List[dict], schema: pa.Schema
+) -> None:
     """Write a batch of events to the parquet writer."""
-    table = pa.table({
-        "event_id": pa.array([e["event_id"] for e in batch], type=pa.string()),
-        "event_type": pa.array([e["event_type"] for e in batch], type=pa.string()),
-        "ts": pa.array([e["ts"] for e in batch], type=pa.string()),
-        "ts_seconds": pa.array([e["ts_seconds"] for e in batch], type=pa.int64()),
-        "location_id": pa.array([e.get("location_id") for e in batch], type=pa.int32()),
-        "order_id": pa.array([e.get("order_id") for e in batch], type=pa.string()),
-        "sequence": pa.array([e["sequence"] for e in batch], type=pa.int32()),
-        "body": pa.array([e["body"] for e in batch], type=pa.string()),
-    }, schema=schema)
+    table = pa.table(
+        {
+            "event_id": pa.array([e["event_id"] for e in batch], type=pa.string()),
+            "event_type": pa.array([e["event_type"] for e in batch], type=pa.string()),
+            "ts": pa.array([e["ts"] for e in batch], type=pa.string()),
+            "ts_seconds": pa.array([e["ts_seconds"] for e in batch], type=pa.int64()),
+            "location_id": pa.array(
+                [e.get("location_id") for e in batch], type=pa.int32()
+            ),
+            "order_id": pa.array([e.get("order_id") for e in batch], type=pa.string()),
+            "sequence": pa.array([e["sequence"] for e in batch], type=pa.int32()),
+            "body": pa.array([e["body"] for e in batch], type=pa.string()),
+        },
+        schema=schema,
+    )
     writer.write_table(table)
 
 

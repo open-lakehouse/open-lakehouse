@@ -6,11 +6,13 @@ running containers. For live Airflow testing, the container must be started.
 
 import os
 import subprocess
+
 import pytest
 import yaml
 
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 DAGS_DIR = os.path.join(PROJECT_ROOT, "dags")
 
 
@@ -37,15 +39,23 @@ class TestAirflowDockerConfiguration:
         }
 
         result = subprocess.run(
-            ["docker", "compose", "-f", "docker-compose-airflow.yml", "config", "--quiet"],
+            [
+                "docker",
+                "compose",
+                "-f",
+                "docker-compose-airflow.yml",
+                "config",
+                "--quiet",
+            ],
             cwd=project_root,
             capture_output=True,
             text=True,
             env=env,
         )
         # Allow for missing .env file but syntax should be valid
-        assert result.returncode == 0 or "env file" in result.stderr.lower(), \
-            f"Docker compose validation failed: {result.stderr}"
+        assert (
+            result.returncode == 0 or "env file" in result.stderr.lower()
+        ), f"Docker compose validation failed: {result.stderr}"
 
     def test_dockerfile_exists(self, project_root):
         """Verify Airflow Dockerfile exists."""
@@ -68,8 +78,9 @@ class TestAirflowDockerConfiguration:
 
         # Check x-airflow-common for network_mode
         common = config.get("x-airflow-common", {})
-        assert common.get("network_mode") == "host", \
-            "Airflow should use host network mode for service access"
+        assert (
+            common.get("network_mode") == "host"
+        ), "Airflow should use host network mode for service access"
 
 
 @pytest.mark.integration
@@ -92,7 +103,9 @@ class TestAirflowDAGValidation:
                 capture_output=True,
                 text=True,
             )
-            assert result.returncode == 0, f"Syntax error in {dag_file}: {result.stderr}"
+            assert (
+                result.returncode == 0
+            ), f"Syntax error in {dag_file}: {result.stderr}"
 
     def test_medallion_pipeline_references_correct_scripts(self, project_root):
         """Medallion pipeline DAG should reference correct script paths."""
@@ -101,8 +114,9 @@ class TestAirflowDAGValidation:
             content = f.read()
 
         # Should reference pipelines directory
-        assert "/scripts/pipelines/" in content, \
-            "DAG should reference scripts/pipelines/ directory"
+        assert (
+            "/scripts/pipelines/" in content
+        ), "DAG should reference scripts/pipelines/ directory"
 
     def test_dags_use_spark_version_variable(self, project_root):
         """DAGs should support configurable Spark version."""
@@ -114,8 +128,9 @@ class TestAirflowDAGValidation:
             with open(dag_path) as f:
                 content = f.read()
 
-            assert "Variable.get" in content, \
-                f"{dag_file} should use Airflow Variables for configuration"
+            assert (
+                "Variable.get" in content
+            ), f"{dag_file} should use Airflow Variables for configuration"
 
 
 @pytest.mark.integration
@@ -136,8 +151,9 @@ class TestAirflowCLIIntegration:
         with open(lakehouse_cli) as f:
             content = f.read()
 
-        assert "docker-compose-airflow.yml" in content, \
-            "CLI should reference docker-compose-airflow.yml"
+        assert (
+            "docker-compose-airflow.yml" in content
+        ), "CLI should reference docker-compose-airflow.yml"
 
     def test_cli_has_airflow_log_commands(self, project_root, lakehouse_cli):
         """CLI should support airflow log viewing."""
@@ -155,23 +171,34 @@ class TestAirflowConfigurationFiles:
 
     def test_setup_connections_script_is_executable(self, project_root):
         """Connection setup script should be executable or have shebang."""
-        script_path = os.path.join(project_root, "config", "airflow", "setup_connections.sh")
+        script_path = os.path.join(
+            project_root, "config", "airflow", "setup_connections.sh"
+        )
         if not os.path.exists(script_path):
             pytest.skip("setup_connections.sh not present")
 
         with open(script_path) as f:
             first_line = f.readline()
 
-        assert first_line.startswith("#!/bin/bash") or first_line.startswith("#!/usr/bin/env bash"), \
-            "Script should have bash shebang"
+        assert first_line.startswith("#!/bin/bash") or first_line.startswith(
+            "#!/usr/bin/env bash"
+        ), "Script should have bash shebang"
 
     def test_setup_connections_configures_all_services(self, project_root):
         """Setup script should configure all required connections."""
-        script_path = os.path.join(project_root, "config", "airflow", "setup_connections.sh")
+        script_path = os.path.join(
+            project_root, "config", "airflow", "setup_connections.sh"
+        )
         with open(script_path) as f:
             content = f.read()
 
-        required_connections = ["kafka", "spark_local", "postgres", "unity_catalog", "mlflow"]
+        required_connections = [
+            "kafka",
+            "spark_local",
+            "postgres",
+            "unity_catalog",
+            "mlflow",
+        ]
         for conn in required_connections:
             assert conn in content.lower(), f"Missing connection setup for: {conn}"
 
@@ -181,8 +208,9 @@ class TestAirflowConfigurationFiles:
         with open(env_path) as f:
             content = f.read()
 
-        assert "AIRFLOW_FERNET_KEY" in content, \
-            "AIRFLOW_FERNET_KEY should be documented in .env.example"
+        assert (
+            "AIRFLOW_FERNET_KEY" in content
+        ), "AIRFLOW_FERNET_KEY should be documented in .env.example"
 
 
 @pytest.mark.integration
@@ -200,10 +228,12 @@ class TestAirflowDocumentation:
         with open(guide_path) as f:
             content = f.read()
 
-        assert "Quick Start" in content or "Quickstart" in content, \
-            "Guide should have quickstart section"
-        assert "./lakehouse start airflow" in content, \
-            "Guide should show how to start airflow"
+        assert (
+            "Quick Start" in content or "Quickstart" in content
+        ), "Guide should have quickstart section"
+        assert (
+            "./lakehouse start airflow" in content
+        ), "Guide should show how to start airflow"
 
     def test_airflow_guide_documents_dags(self, project_root):
         """Airflow guide should document included DAGs."""

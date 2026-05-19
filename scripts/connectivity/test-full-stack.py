@@ -26,15 +26,15 @@ Usage:
     python scripts/test-full-stack.py
 """
 
-import sys
 import json
-import time
+import sys
 import uuid
 from datetime import datetime, timedelta
 
 try:
-    from kafka import KafkaProducer, KafkaConsumer
+    from kafka import KafkaConsumer, KafkaProducer
     from kafka.admin import KafkaAdminClient, NewTopic
+
     KAFKA_AVAILABLE = True
 except ImportError:
     KAFKA_AVAILABLE = False
@@ -42,15 +42,23 @@ except ImportError:
 
 try:
     import psycopg2
+
     PSYCOPG2_AVAILABLE = True
 except ImportError:
     PSYCOPG2_AVAILABLE = False
-    print("Warning: psycopg2 not installed. Direct catalog verification will be skipped.")
+    print(
+        "Warning: psycopg2 not installed. Direct catalog verification will be skipped."
+    )
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as f
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, TimestampType, IntegerType
-
+from pyspark.sql.types import (
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 # Configuration
 KAFKA_BOOTSTRAP = "localhost:9092"
@@ -119,16 +127,12 @@ def test_kafka_produce(events):
         # Produce messages
         producer = KafkaProducer(
             bootstrap_servers=KAFKA_BOOTSTRAP,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-            key_serializer=lambda k: k.encode('utf-8') if k else None,
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+            key_serializer=lambda k: k.encode("utf-8") if k else None,
         )
 
         for event in events:
-            producer.send(
-                KAFKA_TOPIC,
-                key=event['order_id'],
-                value=event
-            )
+            producer.send(KAFKA_TOPIC, key=event["order_id"], value=event)
 
         producer.flush()
         print(f"  Produced {len(events)} messages to Kafka")
@@ -148,27 +152,30 @@ def test_spark_kafka_read(spark):
 
     try:
         # Read from Kafka (batch mode for testing)
-        kafka_df = spark.read \
-            .format("kafka") \
-            .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP) \
-            .option("subscribe", KAFKA_TOPIC) \
-            .option("startingOffsets", "earliest") \
-            .option("endingOffsets", "latest") \
+        kafka_df = (
+            spark.read.format("kafka")
+            .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP)
+            .option("subscribe", KAFKA_TOPIC)
+            .option("startingOffsets", "earliest")
+            .option("endingOffsets", "latest")
             .load()
+        )
 
         # Parse JSON
-        schema = StructType([
-            StructField("event_id", StringType(), True),
-            StructField("event_type", StringType(), True),
-            StructField("timestamp", StringType(), True),
-            StructField("order_id", StringType(), True),
-            StructField("customer_id", StringType(), True),
-            StructField("product_id", StringType(), True),
-            StructField("product_name", StringType(), True),
-            StructField("quantity", IntegerType(), True),
-            StructField("unit_price", DoubleType(), True),
-            StructField("total", DoubleType(), True),
-        ])
+        schema = StructType(
+            [
+                StructField("event_id", StringType(), True),
+                StructField("event_type", StringType(), True),
+                StructField("timestamp", StringType(), True),
+                StructField("order_id", StringType(), True),
+                StructField("customer_id", StringType(), True),
+                StructField("product_id", StringType(), True),
+                StructField("product_name", StringType(), True),
+                StructField("quantity", IntegerType(), True),
+                StructField("unit_price", DoubleType(), True),
+                StructField("total", DoubleType(), True),
+            ]
+        )
 
         parsed_df = kafka_df.select(
             f.from_json(f.col("value").cast("string"), schema).alias("data")
@@ -189,6 +196,7 @@ def test_spark_kafka_read(spark):
     except Exception as e:
         print(f"  ❌ Spark Kafka read failed: {e}")
         import traceback
+
         traceback.print_exc()
         return None
 
@@ -228,7 +236,9 @@ def test_iceberg_bronze_write(spark, events_df):
         bronze_df = events_df.withColumn("ingested_at", f.current_timestamp())
         bronze_df.writeTo("iceberg.test_full_stack.bronze_orders").append()
 
-        count = spark.sql("SELECT COUNT(*) FROM iceberg.test_full_stack.bronze_orders").collect()[0][0]
+        count = spark.sql(
+            "SELECT COUNT(*) FROM iceberg.test_full_stack.bronze_orders"
+        ).collect()[0][0]
         print(f"  Wrote {count} records to bronze layer")
 
         if count > 0:
@@ -275,7 +285,9 @@ def test_silver_transformation(spark):
             WHERE order_id IS NOT NULL
         """)
 
-        count = spark.sql("SELECT COUNT(*) FROM iceberg.test_full_stack.silver_orders").collect()[0][0]
+        count = spark.sql(
+            "SELECT COUNT(*) FROM iceberg.test_full_stack.silver_orders"
+        ).collect()[0][0]
         print(f"  Transformed {count} records to silver layer")
 
         print("\n  Silver layer sample:")
@@ -324,7 +336,9 @@ def test_gold_aggregation(spark):
             GROUP BY customer_id
         """)
 
-        count = spark.sql("SELECT COUNT(*) FROM iceberg.test_full_stack.gold_customer_summary").collect()[0][0]
+        count = spark.sql(
+            "SELECT COUNT(*) FROM iceberg.test_full_stack.gold_customer_summary"
+        ).collect()[0][0]
         print(f"  Created {count} customer summaries in gold layer")
 
         print("\n  Gold layer (customer summary):")
@@ -357,10 +371,10 @@ def test_postgres_catalog(spark):
         print("  Using Spark catalog (psycopg2 not available)")
         try:
             tables = spark.sql("SHOW TABLES IN iceberg.test_full_stack").collect()
-            table_names = [t['tableName'] for t in tables]
+            table_names = [t["tableName"] for t in tables]
             print(f"  Tables in test_full_stack namespace: {table_names}")
 
-            expected = ['bronze_orders', 'silver_orders', 'gold_customer_summary']
+            expected = ["bronze_orders", "silver_orders", "gold_customer_summary"]
             found = all(t in table_names for t in expected)
 
             if found:
@@ -379,7 +393,7 @@ def test_postgres_catalog(spark):
             port=POSTGRES_PORT,
             database=POSTGRES_DB,
             user=POSTGRES_USER,
-            password=POSTGRES_PASSWORD
+            password=POSTGRES_PASSWORD,
         )
         cursor = conn.cursor()
 
@@ -418,13 +432,23 @@ def test_data_consistency(spark):
 
     try:
         # Get counts from each layer
-        bronze_count = spark.sql("SELECT COUNT(*) FROM iceberg.test_full_stack.bronze_orders").collect()[0][0]
-        silver_count = spark.sql("SELECT COUNT(*) FROM iceberg.test_full_stack.silver_orders").collect()[0][0]
+        bronze_count = spark.sql(
+            "SELECT COUNT(*) FROM iceberg.test_full_stack.bronze_orders"
+        ).collect()[0][0]
+        silver_count = spark.sql(
+            "SELECT COUNT(*) FROM iceberg.test_full_stack.silver_orders"
+        ).collect()[0][0]
 
         # Get totals
-        bronze_total = spark.sql("SELECT SUM(total) FROM iceberg.test_full_stack.bronze_orders").collect()[0][0]
-        silver_total = spark.sql("SELECT SUM(total) FROM iceberg.test_full_stack.silver_orders").collect()[0][0]
-        gold_total = spark.sql("SELECT SUM(total_revenue) FROM iceberg.test_full_stack.gold_customer_summary").collect()[0][0]
+        bronze_total = spark.sql(
+            "SELECT SUM(total) FROM iceberg.test_full_stack.bronze_orders"
+        ).collect()[0][0]
+        silver_total = spark.sql(
+            "SELECT SUM(total) FROM iceberg.test_full_stack.silver_orders"
+        ).collect()[0][0]
+        gold_total = spark.sql(
+            "SELECT SUM(total_revenue) FROM iceberg.test_full_stack.gold_customer_summary"
+        ).collect()[0][0]
 
         print(f"  Bronze layer: {bronze_count} records, ${bronze_total:.2f} total")
         print(f"  Silver layer: {silver_count} records, ${silver_total:.2f} total")
@@ -439,9 +463,13 @@ def test_data_consistency(spark):
             return True
         else:
             if not counts_match:
-                print(f"  ⚠️  Count mismatch: bronze={bronze_count}, silver={silver_count}")
+                print(
+                    f"  ⚠️  Count mismatch: bronze={bronze_count}, silver={silver_count}"
+                )
             if not totals_match:
-                print(f"  ⚠️  Total mismatch: bronze=${bronze_total:.2f}, gold=${gold_total:.2f}")
+                print(
+                    f"  ⚠️  Total mismatch: bronze=${bronze_total:.2f}, gold=${gold_total:.2f}"
+                )
             return False
 
     except Exception as e:
@@ -483,9 +511,7 @@ def main():
     print("=" * 60)
 
     # Initialize Spark
-    spark = SparkSession.builder \
-        .appName("FullStack-Test") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("FullStack-Test").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
     results = {}
@@ -495,25 +521,25 @@ def main():
     print(f"\nGenerated {len(events)} test events")
 
     # Run tests
-    results['kafka_produce'] = test_kafka_produce(events)
+    results["kafka_produce"] = test_kafka_produce(events)
 
     # If Kafka production failed or not available, create DataFrame directly
     events_df = test_spark_kafka_read(spark)
     if events_df is None:
         print("\n  Creating DataFrame directly from test events...")
         events_df = spark.createDataFrame(events)
-        results['spark_kafka_read'] = True
+        results["spark_kafka_read"] = True
     else:
-        results['spark_kafka_read'] = True
+        results["spark_kafka_read"] = True
 
-    results['bronze_write'] = test_iceberg_bronze_write(spark, events_df)
-    results['silver_transform'] = test_silver_transformation(spark)
-    results['gold_aggregation'] = test_gold_aggregation(spark)
-    results['postgres_catalog'] = test_postgres_catalog(spark)
-    results['data_consistency'] = test_data_consistency(spark)
+    results["bronze_write"] = test_iceberg_bronze_write(spark, events_df)
+    results["silver_transform"] = test_silver_transformation(spark)
+    results["gold_aggregation"] = test_gold_aggregation(spark)
+    results["postgres_catalog"] = test_postgres_catalog(spark)
+    results["data_consistency"] = test_data_consistency(spark)
 
     # Cleanup
-    if '--no-cleanup' not in sys.argv:
+    if "--no-cleanup" not in sys.argv:
         cleanup(spark)
 
     # Summary

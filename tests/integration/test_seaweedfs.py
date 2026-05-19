@@ -5,8 +5,9 @@ Tests for S3-compatible storage (SeaweedFS) integration with Iceberg.
 These tests verify storage configuration and file operations.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Project root
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -25,7 +26,9 @@ class TestSeaweedFSConfiguration:
 
         # Check for S3A configuration
         assert "fs.s3a" in content, "Should have S3A filesystem config"
-        assert "s3a.endpoint" in content or "s3.endpoint" in content, "Should have S3 endpoint config"
+        assert (
+            "s3a.endpoint" in content or "s3.endpoint" in content
+        ), "Should have S3 endpoint config"
 
     def test_env_example_has_s3_vars(self):
         """Environment example should have S3 credential placeholders."""
@@ -78,10 +81,9 @@ class TestStorageScripts:
             pytest.skip("test-seaweedfs.py not found")
 
         import subprocess
+
         result = subprocess.run(
-            ["python3", "-m", "py_compile", str(script)],
-            capture_output=True,
-            text=True
+            ["python3", "-m", "py_compile", str(script)], capture_output=True, text=True
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -112,8 +114,9 @@ class TestSeaweedFSLive:
     def check_seaweedfs_running(self):
         """Skip tests if SeaweedFS is not running."""
         import socket
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        result = sock.connect_ex(('localhost', 8333))
+        result = sock.connect_ex(("localhost", 8333))
         sock.close()
         if result != 0:
             pytest.skip("SeaweedFS not running on port 8333")
@@ -125,17 +128,17 @@ class TestSeaweedFSLive:
             from botocore.client import Config
 
             s3 = boto3.client(
-                's3',
-                endpoint_url='http://localhost:8333',
-                aws_access_key_id='admin',
-                aws_secret_access_key='admin',
-                config=Config(signature_version='s3v4'),
-                region_name='us-east-1'
+                "s3",
+                endpoint_url="http://localhost:8333",
+                aws_access_key_id="admin",
+                aws_secret_access_key="admin",
+                config=Config(signature_version="s3v4"),
+                region_name="us-east-1",
             )
 
             # Try to list buckets
             response = s3.list_buckets()
-            assert 'Buckets' in response
+            assert "Buckets" in response
         except ImportError:
             pytest.skip("boto3 not installed")
         except Exception as e:

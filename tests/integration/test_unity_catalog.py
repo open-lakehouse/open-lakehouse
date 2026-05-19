@@ -9,9 +9,10 @@ These tests verify:
 """
 
 import subprocess
+from pathlib import Path
+
 import pytest
 import yaml
-from pathlib import Path
 
 # Root directory of the project
 ROOT_DIR = Path(__file__).parent.parent.parent
@@ -144,9 +145,7 @@ class TestUnityCatalogDemoScript:
         """Demo script should have valid Python syntax."""
         script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
         result = subprocess.run(
-            ["python3", "-m", "py_compile", str(script)],
-            capture_output=True,
-            text=True
+            ["python3", "-m", "py_compile", str(script)], capture_output=True, text=True
         )
         assert result.returncode == 0, f"Syntax error: {result.stderr}"
 
@@ -180,8 +179,8 @@ class TestUnityCatalogLive:
     @pytest.fixture(autouse=True)
     def check_unity_catalog_running(self):
         """Skip tests if Unity Catalog is not running."""
-        import urllib.request
         import urllib.error
+        import urllib.request
 
         # Check if Unity Catalog API specifically responds (not just port 8080)
         url = "http://localhost:8080/api/2.1/unity-catalog/catalogs"
@@ -194,8 +193,8 @@ class TestUnityCatalogLive:
 
     def test_unity_catalog_api_responds(self):
         """Unity Catalog REST API should respond."""
-        import urllib.request
         import json
+        import urllib.request
 
         url = "http://localhost:8080/api/2.1/unity-catalog/catalogs"
         try:
@@ -207,8 +206,8 @@ class TestUnityCatalogLive:
 
     def test_iceberg_endpoint_responds(self):
         """Iceberg REST endpoint should respond."""
-        import urllib.request
         import urllib.error
+        import urllib.request
 
         url = "http://localhost:8080/api/2.1/unity-catalog/iceberg/v1/config"
         try:

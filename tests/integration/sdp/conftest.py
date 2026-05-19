@@ -3,21 +3,27 @@
 Provides Spark sessions configured for different data source types.
 """
 
-import pytest
-import tempfile
 import shutil
+import tempfile
 from typing import Generator, Optional
 
+import pytest
 from pyspark.sql import SparkSession
 
 
 def pytest_configure(config):
     """Register SDP-specific markers."""
     config.addinivalue_line("markers", "sdp: mark test as SDP data source test")
-    config.addinivalue_line("markers", "file_formats: mark test for file format sources")
-    config.addinivalue_line("markers", "table_formats: mark test for table format sources")
+    config.addinivalue_line(
+        "markers", "file_formats: mark test for file format sources"
+    )
+    config.addinivalue_line(
+        "markers", "table_formats: mark test for table format sources"
+    )
     config.addinivalue_line("markers", "streaming: mark test for streaming sources")
-    config.addinivalue_line("markers", "benchmark: mark test as benchmark (may be slow)")
+    config.addinivalue_line(
+        "markers", "benchmark: mark test as benchmark (may be slow)"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -36,7 +42,9 @@ def spark_with_iceberg() -> Generator[SparkSession, None, None]:
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
         )
-        .config("spark.sql.catalog.test_iceberg", "org.apache.iceberg.spark.SparkCatalog")
+        .config(
+            "spark.sql.catalog.test_iceberg", "org.apache.iceberg.spark.SparkCatalog"
+        )
         .config("spark.sql.catalog.test_iceberg.type", "hadoop")
         .config("spark.sql.catalog.test_iceberg.warehouse", warehouse)
         .getOrCreate()
@@ -100,13 +108,15 @@ def temp_data_dir(tmp_path) -> str:
 @pytest.fixture(scope="session")
 def sample_df(spark):
     """Create a sample DataFrame for testing."""
-    from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+    from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
-    schema = StructType([
-        StructField("id", IntegerType(), False),
-        StructField("name", StringType(), True),
-        StructField("value", IntegerType(), True),
-    ])
+    schema = StructType(
+        [
+            StructField("id", IntegerType(), False),
+            StructField("name", StringType(), True),
+            StructField("value", IntegerType(), True),
+        ]
+    )
 
     data = [
         (1, "alpha", 100),
@@ -122,14 +132,16 @@ def sample_df(spark):
 @pytest.fixture(scope="session")
 def events_df(spark):
     """Create a sample events DataFrame for streaming tests."""
-    from pyspark.sql.types import StructType, StructField, StringType, LongType
+    from pyspark.sql.types import LongType, StringType, StructField, StructType
 
-    schema = StructType([
-        StructField("event_id", StringType(), False),
-        StructField("event_type", StringType(), False),
-        StructField("timestamp", LongType(), False),
-        StructField("payload", StringType(), True),
-    ])
+    schema = StructType(
+        [
+            StructField("event_id", StringType(), False),
+            StructField("event_type", StringType(), False),
+            StructField("timestamp", LongType(), False),
+            StructField("payload", StringType(), True),
+        ]
+    )
 
     data = [
         ("evt001", "order_created", 1704067200, '{"total": 25.99}'),

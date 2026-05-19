@@ -5,10 +5,11 @@ For full replay from generated data, use: ./lakehouse testdata stream
 """
 
 import json
-import time
 import random
+import time
 import uuid
 from datetime import datetime
+
 from kafka import KafkaProducer
 
 producer = KafkaProducer(
@@ -53,13 +54,15 @@ try:
                 "location_id": location_id,
                 "order_id": order_id,
                 "sequence": seq,
-                "body": json.dumps({
-                    "brand_id": brand_id,
-                    "total": total,
-                    "lat": round(random.uniform(37.7, 37.8), 6),
-                    "lng": round(random.uniform(-122.5, -122.4), 6),
-                    "driver_id": f"driver_{random.randint(1, 50)}",
-                }),
+                "body": json.dumps(
+                    {
+                        "brand_id": brand_id,
+                        "total": total,
+                        "lat": round(random.uniform(37.7, 37.8), 6),
+                        "lng": round(random.uniform(-122.5, -122.4), 6),
+                        "driver_id": f"driver_{random.randint(1, 50)}",
+                    }
+                ),
             }
 
             producer.send("orders", key=order_id, value=event)

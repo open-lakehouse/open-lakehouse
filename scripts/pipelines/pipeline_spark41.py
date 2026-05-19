@@ -20,23 +20,24 @@ Note: In production with actual SDP, you would use:
     spark-pipelines run --spec scripts/spark-pipeline.yml
 """
 
+import re
+from functools import wraps
+from typing import Callable, Dict, List, Set
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as f
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    StringType,
-    IntegerType,
     DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
 )
-from functools import wraps
-from typing import Callable, Dict, List, Set
-import re
-
 
 # =============================================================================
 # PIPELINE FRAMEWORK (Mimics SDP)
 # =============================================================================
+
 
 class Pipeline:
     """Mini SDP framework that demonstrates declarative pipeline patterns.
@@ -53,30 +54,34 @@ class Pipeline:
     @property
     def spark(self) -> SparkSession:
         if self._spark is None:
-            self._spark = SparkSession.builder \
-                .appName(f"Pipeline_{self.name}") \
-                .getOrCreate()
+            self._spark = SparkSession.builder.appName(
+                f"Pipeline_{self.name}"
+            ).getOrCreate()
             self._spark.sparkContext.setLogLevel("WARN")
         return self._spark
 
     def materialized_view(self, name: str, layer: str = "bronze"):
         """Decorator that registers a table definition."""
+
         def decorator(func: Callable):
             # Infer dependencies from spark.table() calls
             import inspect
+
             source = inspect.getsource(func)
             deps = set(re.findall(r'spark\.table\(["\']([^"\']+)["\']\)', source))
 
             self.tables[name] = {
-                'func': func,
-                'layer': layer,
-                'deps': deps,
+                "func": func,
+                "layer": layer,
+                "deps": deps,
             }
 
             @wraps(func)
             def wrapper():
                 return func()
+
             return wrapper
+
         return decorator
 
     def _get_execution_order(self) -> List[str]:
@@ -90,7 +95,7 @@ class Pipeline:
             visited.add(table_name)
 
             if table_name in self.tables:
-                for dep in self.tables[table_name]['deps']:
+                for dep in self.tables[table_name]["deps"]:
                     short_dep = dep.replace(f"{self.catalog}.", "")
                     visit(short_dep)
             order.append(table_name)
@@ -116,23 +121,25 @@ class Pipeline:
                 continue
 
             info = self.tables[table_name]
-            if layer and info['layer'] != layer:
+            if layer and info["layer"] != layer:
                 continue
 
             full_name = f"{self.catalog}.{table_name}"
-            deps = info['deps']
+            deps = info["deps"]
 
-            layer_name = info['layer'].upper()
+            layer_name = info["layer"].upper()
             print(f"\n[{layer_name}] {table_name}")
             if deps:
                 print(f"  Dependencies: {deps}")
 
             # Execute and write
-            df = info['func']()
+            df = info["func"]()
             df.write.mode("overwrite").saveAsTable(full_name)
 
             # Get count from table (avoids re-scan of large DataFrames)
-            count = self.spark.sql(f"SELECT COUNT(*) as cnt FROM {full_name}").collect()[0]['cnt']
+            count = self.spark.sql(
+                f"SELECT COUNT(*) as cnt FROM {full_name}"
+            ).collect()[0]["cnt"]
             results[table_name] = count
             print(f"  -> {count:,} rows")
 
@@ -155,6 +162,7 @@ spark = pipeline.spark  # Global spark for table functions
 # =============================================================================
 # BRONZE LAYER - Raw Data Ingestion
 # =============================================================================
+
 
 @pipeline.materialized_view(name="bronze.dim_categories", layer="bronze")
 def dim_categories():
@@ -185,14 +193,14 @@ def orders_batch():
     """Order lifecycle events with timestamp parsing."""
     df = spark.read.parquet("/data/events/orders_90d.parquet")
     return df.withColumn(
-        "event_timestamp",
-        f.to_timestamp(f.regexp_replace("ts", "T", " "))
+        "event_timestamp", f.to_timestamp(f.regexp_replace("ts", "T", " "))
     )
 
 
 # =============================================================================
 # SILVER LAYER - Cleaned and Enriched
 # =============================================================================
+
 
 @pipeline.materialized_view(name="silver.orders_enriched", layer="silver")
 def orders_enriched():
@@ -205,27 +213,36 @@ def orders_enriched():
 
     # Filter nulls
     cleaned = orders.filter(
-        f.col("event_id").isNotNull() &
-        f.col("order_id").isNotNull() &
-        f.col("event_timestamp").isNotNull()
+        f.col("event_id").isNotNull()
+        & f.col("order_id").isNotNull()
+        & f.col("event_timestamp").isNotNull()
     )
 
     # Parse JSON body
-    body_schema = StructType([
-        StructField("brand_id", IntegerType(), True),
-        StructField("item_ids", StringType(), True),
-        StructField("total", DoubleType(), True),
-        StructField("lat", DoubleType(), True),
-        StructField("lng", DoubleType(), True),
-        StructField("driver_id", StringType(), True),
-    ])
+    body_schema = StructType(
+        [
+            StructField("brand_id", IntegerType(), True),
+            StructField("item_ids", StringType(), True),
+            StructField("total", DoubleType(), True),
+            StructField("lat", DoubleType(), True),
+            StructField("lng", DoubleType(), True),
+            StructField("driver_id", StringType(), True),
+        ]
+    )
 
     enriched = cleaned.withColumn("body_parsed", f.from_json("body", body_schema))
 
     # Extract fields
     enriched = enriched.select(
-        "event_id", "event_type", "event_timestamp", "ts", "ts_seconds",
-        "order_id", "location_id", "sequence", "body",
+        "event_id",
+        "event_type",
+        "event_timestamp",
+        "ts",
+        "ts_seconds",
+        "order_id",
+        "location_id",
+        "sequence",
+        "body",
         f.col("body_parsed.brand_id").alias("brand_id"),
         f.col("body_parsed.total").alias("order_total"),
         f.col("body_parsed.lat").alias("latitude"),
@@ -234,12 +251,16 @@ def orders_enriched():
     )
 
     # Add time features
-    enriched = enriched.withColumns({
-        "event_hour": f.hour("event_timestamp"),
-        "event_day_of_week": f.dayofweek("event_timestamp"),
-        "is_weekend": f.when(f.dayofweek("event_timestamp").isin(1, 7), True).otherwise(False),
-        "event_date": f.to_date("event_timestamp"),
-    })
+    enriched = enriched.withColumns(
+        {
+            "event_hour": f.hour("event_timestamp"),
+            "event_day_of_week": f.dayofweek("event_timestamp"),
+            "is_weekend": f.when(
+                f.dayofweek("event_timestamp").isin(1, 7), True
+            ).otherwise(False),
+            "event_date": f.to_date("event_timestamp"),
+        }
+    )
 
     # Join with locations
     locations_lookup = locations.select(
@@ -256,15 +277,28 @@ def order_lifecycle():
     orders = spark.table("iceberg.silver.orders_enriched")
 
     # Pivot events to columns
-    lifecycle = orders.groupBy("order_id", "location_id", "city_name").pivot(
-        "event_type",
-        ["order_created", "kitchen_started", "kitchen_finished", "order_ready",
-         "driver_arrived", "driver_picked_up", "delivered"]
-    ).agg(f.min("event_timestamp").alias("ts"))
+    lifecycle = (
+        orders.groupBy("order_id", "location_id", "city_name")
+        .pivot(
+            "event_type",
+            [
+                "order_created",
+                "kitchen_started",
+                "kitchen_finished",
+                "order_ready",
+                "driver_arrived",
+                "driver_picked_up",
+                "delivered",
+            ],
+        )
+        .agg(f.min("event_timestamp").alias("ts"))
+    )
 
     # Rename columns
     lifecycle = lifecycle.select(
-        "order_id", "location_id", "city_name",
+        "order_id",
+        "location_id",
+        "city_name",
         f.col("order_created").alias("created_at"),
         f.col("kitchen_started").alias("kitchen_started_at"),
         f.col("kitchen_finished").alias("kitchen_finished_at"),
@@ -275,11 +309,23 @@ def order_lifecycle():
     )
 
     # Calculate durations
-    lifecycle = lifecycle.withColumns({
-        "kitchen_duration_min": (f.unix_timestamp("kitchen_finished_at") - f.unix_timestamp("kitchen_started_at")) / 60,
-        "delivery_duration_min": (f.unix_timestamp("delivered_at") - f.unix_timestamp("pickup_at")) / 60,
-        "total_duration_min": (f.unix_timestamp("delivered_at") - f.unix_timestamp("created_at")) / 60,
-    })
+    lifecycle = lifecycle.withColumns(
+        {
+            "kitchen_duration_min": (
+                f.unix_timestamp("kitchen_finished_at")
+                - f.unix_timestamp("kitchen_started_at")
+            )
+            / 60,
+            "delivery_duration_min": (
+                f.unix_timestamp("delivered_at") - f.unix_timestamp("pickup_at")
+            )
+            / 60,
+            "total_duration_min": (
+                f.unix_timestamp("delivered_at") - f.unix_timestamp("created_at")
+            )
+            / 60,
+        }
+    )
 
     # Filter to completed orders
     return lifecycle.filter(f.col("delivered_at").isNotNull())
@@ -289,18 +335,21 @@ def order_lifecycle():
 # GOLD LAYER - Business Aggregations
 # =============================================================================
 
+
 @pipeline.materialized_view(name="gold.hourly_metrics", layer="gold")
 def hourly_metrics():
     """Hourly order metrics by location."""
     orders = spark.table("iceberg.silver.orders_enriched")
 
-    return orders.filter(f.col("event_type") == "order_created").groupBy(
-        "event_date", "event_hour", "location_id", "city_name"
-    ).agg(
-        f.count("order_id").alias("order_count"),
-        f.sum("order_total").alias("total_revenue"),
-        f.avg("order_total").alias("avg_order_value"),
-        f.countDistinct("brand_id").alias("unique_brands"),
+    return (
+        orders.filter(f.col("event_type") == "order_created")
+        .groupBy("event_date", "event_hour", "location_id", "city_name")
+        .agg(
+            f.count("order_id").alias("order_count"),
+            f.sum("order_total").alias("total_revenue"),
+            f.avg("order_total").alias("avg_order_value"),
+            f.countDistinct("brand_id").alias("unique_brands"),
+        )
     )
 
 
@@ -310,8 +359,7 @@ def delivery_performance():
     lifecycle = spark.table("iceberg.silver.order_lifecycle")
 
     return lifecycle.groupBy(
-        f.to_date("created_at").alias("order_date"),
-        "location_id", "city_name"
+        f.to_date("created_at").alias("order_date"), "location_id", "city_name"
     ).agg(
         f.count("order_id").alias("completed_orders"),
         f.avg("kitchen_duration_min").alias("avg_kitchen_time_min"),
@@ -328,22 +376,30 @@ def brand_summary():
     orders = spark.table("iceberg.silver.orders_enriched")
     brands = spark.table("iceberg.bronze.dim_brands")
 
-    brand_metrics = orders.filter(f.col("event_type") == "order_created").groupBy("brand_id").agg(
-        f.count("order_id").alias("total_orders"),
-        f.sum("order_total").alias("total_revenue"),
-        f.avg("order_total").alias("avg_order_value"),
-        f.countDistinct("location_id").alias("locations_served"),
-        f.min("event_date").alias("first_order_date"),
-        f.max("event_date").alias("last_order_date"),
+    brand_metrics = (
+        orders.filter(f.col("event_type") == "order_created")
+        .groupBy("brand_id")
+        .agg(
+            f.count("order_id").alias("total_orders"),
+            f.sum("order_total").alias("total_revenue"),
+            f.avg("order_total").alias("avg_order_value"),
+            f.countDistinct("location_id").alias("locations_served"),
+            f.min("event_date").alias("first_order_date"),
+            f.max("event_date").alias("last_order_date"),
+        )
     )
 
     return brand_metrics.join(
-        brands.select(f.col("id").alias("brand_id"), "name"),
-        on="brand_id", how="left"
+        brands.select(f.col("id").alias("brand_id"), "name"), on="brand_id", how="left"
     ).select(
-        "brand_id", f.col("name").alias("brand_name"),
-        "total_orders", "total_revenue", "avg_order_value",
-        "locations_served", "first_order_date", "last_order_date",
+        "brand_id",
+        f.col("name").alias("brand_name"),
+        "total_orders",
+        "total_revenue",
+        "avg_order_value",
+        "locations_served",
+        "first_order_date",
+        "last_order_date",
     )
 
 

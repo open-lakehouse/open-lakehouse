@@ -23,17 +23,18 @@ Usage:
         /scripts/test-streaming-iceberg.py --duration 30
 """
 
-import sys
 import json
-import uuid
+import sys
 import threading
 import time
-from datetime import datetime, timedelta
+import uuid
 from argparse import ArgumentParser
+from datetime import datetime
 
 try:
     from kafka import KafkaProducer
     from kafka.admin import KafkaAdminClient, NewTopic
+
     KAFKA_AVAILABLE = True
 except ImportError:
     KafkaProducer = None  # type: ignore
@@ -44,8 +45,13 @@ except ImportError:
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as f
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
-
+from pyspark.sql.types import (
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 # Configuration
 KAFKA_BOOTSTRAP = "localhost:9092"
@@ -81,8 +87,8 @@ def start_event_producer(stop_event, events_per_second=2):
 
     producer = KafkaProducer(
         bootstrap_servers=KAFKA_BOOTSTRAP,
-        value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-        key_serializer=lambda k: k.encode('utf-8') if k else None,
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+        key_serializer=lambda k: k.encode("utf-8") if k else None,
     )
 
     products = [
@@ -110,7 +116,7 @@ def start_event_producer(stop_event, events_per_second=2):
             "total": product[2] * quantity,
         }
 
-        producer.send(KAFKA_TOPIC, key=event['order_id'], value=event)
+        producer.send(KAFKA_TOPIC, key=event["order_id"], value=event)
         order_num += 1
 
         time.sleep(1.0 / events_per_second)
@@ -155,65 +161,75 @@ def run_streaming_query(spark, duration_seconds):
     print("=" * 60)
 
     # Define schema for Kafka messages
-    schema = StructType([
-        StructField("event_id", StringType(), True),
-        StructField("event_type", StringType(), True),
-        StructField("timestamp", StringType(), True),
-        StructField("order_id", StringType(), True),
-        StructField("customer_id", StringType(), True),
-        StructField("product_id", StringType(), True),
-        StructField("product_name", StringType(), True),
-        StructField("quantity", IntegerType(), True),
-        StructField("unit_price", DoubleType(), True),
-        StructField("total", DoubleType(), True),
-    ])
+    schema = StructType(
+        [
+            StructField("event_id", StringType(), True),
+            StructField("event_type", StringType(), True),
+            StructField("timestamp", StringType(), True),
+            StructField("order_id", StringType(), True),
+            StructField("customer_id", StringType(), True),
+            StructField("product_id", StringType(), True),
+            StructField("product_name", StringType(), True),
+            StructField("quantity", IntegerType(), True),
+            StructField("unit_price", DoubleType(), True),
+            StructField("total", DoubleType(), True),
+        ]
+    )
 
     if KAFKA_AVAILABLE:
         # Read from Kafka
-        stream_df = spark.readStream \
-            .format("kafka") \
-            .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP) \
-            .option("subscribe", KAFKA_TOPIC) \
-            .option("startingOffsets", "earliest") \
-            .option("failOnDataLoss", "false") \
+        stream_df = (
+            spark.readStream.format("kafka")
+            .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP)
+            .option("subscribe", KAFKA_TOPIC)
+            .option("startingOffsets", "earliest")
+            .option("failOnDataLoss", "false")
             .load()
+        )
 
         # Parse JSON and transform
-        parsed_df = stream_df \
-            .select(f.from_json(f.col("value").cast("string"), schema).alias("data")) \
-            .select("data.*") \
-            .withColumn("event_timestamp", f.to_timestamp("timestamp")) \
-            .withColumn("processing_time", f.current_timestamp()) \
+        parsed_df = (
+            stream_df.select(
+                f.from_json(f.col("value").cast("string"), schema).alias("data")
+            )
+            .select("data.*")
+            .withColumn("event_timestamp", f.to_timestamp("timestamp"))
+            .withColumn("processing_time", f.current_timestamp())
             .drop("timestamp")
+        )
     else:
         # Use rate source for testing without Kafka
         print("  Using rate source (Kafka not available)")
-        rate_df = spark.readStream \
-            .format("rate") \
-            .option("rowsPerSecond", 2) \
-            .load()
+        rate_df = spark.readStream.format("rate").option("rowsPerSecond", 2).load()
 
-        parsed_df = rate_df \
-            .withColumn("event_id", f.expr("uuid()")) \
-            .withColumn("event_type", f.lit("order_placed")) \
-            .withColumn("event_timestamp", f.col("timestamp")) \
-            .withColumn("order_id", f.concat(f.lit("RATE-"), f.col("value").cast("string"))) \
-            .withColumn("customer_id", f.concat(f.lit("CUST-"), (f.col("value") % 10 + 100).cast("string"))) \
-            .withColumn("product_id", f.lit("PROD-001")) \
-            .withColumn("product_name", f.lit("Test Product")) \
-            .withColumn("quantity", (f.col("value") % 3 + 1).cast("int")) \
-            .withColumn("unit_price", f.lit(99.99)) \
-            .withColumn("total", f.col("unit_price") * f.col("quantity")) \
-            .withColumn("processing_time", f.current_timestamp()) \
+        parsed_df = (
+            rate_df.withColumn("event_id", f.expr("uuid()"))
+            .withColumn("event_type", f.lit("order_placed"))
+            .withColumn("event_timestamp", f.col("timestamp"))
+            .withColumn(
+                "order_id", f.concat(f.lit("RATE-"), f.col("value").cast("string"))
+            )
+            .withColumn(
+                "customer_id",
+                f.concat(f.lit("CUST-"), (f.col("value") % 10 + 100).cast("string")),
+            )
+            .withColumn("product_id", f.lit("PROD-001"))
+            .withColumn("product_name", f.lit("Test Product"))
+            .withColumn("quantity", (f.col("value") % 3 + 1).cast("int"))
+            .withColumn("unit_price", f.lit(99.99))
+            .withColumn("total", f.col("unit_price") * f.col("quantity"))
+            .withColumn("processing_time", f.current_timestamp())
             .drop("timestamp", "value")
+        )
 
     # Write to Iceberg with checkpointing
-    query = parsed_df.writeStream \
-        .format("iceberg") \
-        .outputMode("append") \
-        .option("checkpointLocation", CHECKPOINT_DIR) \
-        .option("fanout-enabled", "true") \
+    query = (
+        parsed_df.writeStream.format("iceberg")
+        .outputMode("append")
+        .option("checkpointLocation", CHECKPOINT_DIR)
+        .option("fanout-enabled", "true")
         .toTable("iceberg.test_streaming.orders")
+    )
 
     print(f"  Streaming query started: {query.id}")
     print(f"  Checkpoint location: {CHECKPOINT_DIR}")
@@ -230,9 +246,13 @@ def run_streaming_query(spark, duration_seconds):
 
         # Check progress
         try:
-            current_count = spark.sql("SELECT COUNT(*) FROM iceberg.test_streaming.orders").collect()[0][0]
+            current_count = spark.sql(
+                "SELECT COUNT(*) FROM iceberg.test_streaming.orders"
+            ).collect()[0][0]
             if current_count > last_count:
-                print(f"  Records written: {current_count} (+{current_count - last_count})")
+                print(
+                    f"  Records written: {current_count} (+{current_count - last_count})"
+                )
                 last_count = current_count
         except Exception:
             pass  # Table might not have data yet
@@ -241,7 +261,7 @@ def run_streaming_query(spark, duration_seconds):
 
     # Stop query
     query.stop()
-    print(f"\n  Streaming query stopped")
+    print("\n  Streaming query stopped")
 
     return query
 
@@ -254,7 +274,9 @@ def verify_streaming_results(spark):
 
     try:
         # Check record count
-        count = spark.sql("SELECT COUNT(*) FROM iceberg.test_streaming.orders").collect()[0][0]
+        count = spark.sql(
+            "SELECT COUNT(*) FROM iceberg.test_streaming.orders"
+        ).collect()[0][0]
         print(f"  Total records written: {count}")
 
         if count == 0:
@@ -272,21 +294,29 @@ def verify_streaming_results(spark):
 
         # Check partitions
         print("\n  Partitions created:")
-        partitions = spark.sql("SELECT * FROM iceberg.test_streaming.orders.partitions").collect()
+        partitions = spark.sql(
+            "SELECT * FROM iceberg.test_streaming.orders.partitions"
+        ).collect()
         for p in partitions[:5]:
             print(f"    - {p['partition']}: {p['record_count']} records")
 
         # Check snapshots (commits)
         print("\n  Snapshots (streaming commits):")
-        snapshots = spark.sql("SELECT * FROM iceberg.test_streaming.orders.snapshots").collect()
+        snapshots = spark.sql(
+            "SELECT * FROM iceberg.test_streaming.orders.snapshots"
+        ).collect()
         print(f"    Total snapshots: {len(snapshots)}")
 
         # Verify no duplicates (exactly-once check)
-        distinct_events = spark.sql("SELECT COUNT(DISTINCT event_id) FROM iceberg.test_streaming.orders").collect()[0][0]
+        distinct_events = spark.sql(
+            "SELECT COUNT(DISTINCT event_id) FROM iceberg.test_streaming.orders"
+        ).collect()[0][0]
         if distinct_events == count:
-            print(f"\n  ✅ No duplicates detected (exactly-once semantics working)")
+            print("\n  ✅ No duplicates detected (exactly-once semantics working)")
         else:
-            print(f"\n  ⚠️  Possible duplicates: {count} total, {distinct_events} distinct")
+            print(
+                f"\n  ⚠️  Possible duplicates: {count} total, {distinct_events} distinct"
+            )
 
         print("\n  ✅ Streaming verification passed")
         return True
@@ -309,9 +339,10 @@ def cleanup(spark):
 
         # Clean up checkpoint directory
         import shutil
+
         try:
             shutil.rmtree(CHECKPOINT_DIR)
-            print(f"  ✅ Cleaned up checkpoint directory")
+            print("  ✅ Cleaned up checkpoint directory")
         except Exception:
             pass
 
@@ -330,7 +361,9 @@ def cleanup(spark):
 
 def main():
     parser = ArgumentParser(description="Kafka to Iceberg Streaming Test")
-    parser.add_argument("--duration", type=int, default=20, help="Test duration in seconds")
+    parser.add_argument(
+        "--duration", type=int, default=20, help="Test duration in seconds"
+    )
     parser.add_argument("--no-cleanup", action="store_true", help="Skip cleanup")
     args = parser.parse_args()
 
@@ -341,25 +374,24 @@ def main():
     print("=" * 60)
 
     # Initialize Spark
-    spark = SparkSession.builder \
-        .appName("Streaming-Iceberg-Test") \
-        .config("spark.sql.streaming.schemaInference", "true") \
+    spark = (
+        SparkSession.builder.appName("Streaming-Iceberg-Test")
+        .config("spark.sql.streaming.schemaInference", "true")
         .getOrCreate()
+    )
     spark.sparkContext.setLogLevel("WARN")
 
     results = {}
 
     # Setup
-    results['kafka_topic'] = create_kafka_topic()
+    results["kafka_topic"] = create_kafka_topic()
     setup_iceberg_table(spark)
 
     # Start background producer
     stop_event = threading.Event()
     if KAFKA_AVAILABLE:
         producer_thread = threading.Thread(
-            target=start_event_producer,
-            args=(stop_event,),
-            daemon=True
+            target=start_event_producer, args=(stop_event,), daemon=True
         )
         producer_thread.start()
         print("Started background event producer")
@@ -367,17 +399,17 @@ def main():
     # Run streaming query
     try:
         run_streaming_query(spark, args.duration)
-        results['streaming_query'] = True
+        results["streaming_query"] = True
     except Exception as e:
         print(f"Streaming query failed: {e}")
-        results['streaming_query'] = False
+        results["streaming_query"] = False
 
     # Stop producer
     stop_event.set()
     time.sleep(1)
 
     # Verify results
-    results['verification'] = verify_streaming_results(spark)
+    results["verification"] = verify_streaming_results(spark)
 
     # Cleanup
     if not args.no_cleanup:

@@ -47,7 +47,6 @@ psycopg2-binary = ">=2.9.9,<3.0.0"
 [tool.black]
 line-length = 88
 target-version = ['py310']
-include = '/.pyi?$'
 extend-exclude = '''
 /(
   \.venv
@@ -58,12 +57,23 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 88
-select = ['E', 'F', 'I']
-ignore = ["E501"]
 exclude = [".venv", "jars", "notebooks"]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint]
+select = ['E', 'F', 'I']
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+# SDP pipelines: `spark` is injected by the spark-pipelines runtime;
+# ruff sees it as undefined when linting the file standalone.
+"scripts/pipelines/pipeline_sdp.py" = ["F821"]
+# Connectivity smoke scripts use try/except imports for availability detection;
+# the second name in the import is intentional.
+"scripts/connectivity/test-full-stack.py" = ["F401"]
+# SDP streaming tests assign checkpoint paths used by the runtime's internal
+# state location resolution, not by the test body directly.
+"tests/integration/sdp/test_sdp_streaming.py" = ["F841"]
 
 [tool.coverage.run]
 branch = true

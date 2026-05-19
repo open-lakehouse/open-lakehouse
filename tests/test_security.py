@@ -4,7 +4,6 @@ Security tests for lakehouse-stack.
 These tests verify that security safeguards are in place and working correctly.
 """
 
-import os
 import re
 import subprocess
 from pathlib import Path
@@ -51,7 +50,7 @@ class TestSecretsDetection:
                     ):
                         violations.append(f"{py_file.name}: {match}")
 
-        assert not violations, f"Potential hardcoded secrets found:\n" + "\n".join(
+        assert not violations, "Potential hardcoded secrets found:\n" + "\n".join(
             violations
         )
 
@@ -142,9 +141,11 @@ class TestDockerSecurity:
     def test_compose_files_exist(self):
         """Ensure docker-compose files exist for validation."""
         compose_files = [
-            "docker-compose.yml",
             "docker-compose-spark41.yml",
             "docker-compose-kafka.yml",
+            "docker-compose-unity-catalog.yml",
+            "docker-compose-mlflow.yml",
+            "docker-compose-airflow.yml",
         ]
 
         for compose_file in compose_files:
@@ -155,9 +156,11 @@ class TestDockerSecurity:
     def test_no_privileged_containers_in_main_compose(self):
         """Ensure main compose files don't use privileged mode."""
         compose_files = [
-            "docker-compose.yml",
             "docker-compose-spark41.yml",
             "docker-compose-kafka.yml",
+            "docker-compose-unity-catalog.yml",
+            "docker-compose-mlflow.yml",
+            "docker-compose-airflow.yml",
         ]
 
         for compose_file in compose_files:
@@ -174,23 +177,50 @@ class TestCISecurityConfig:
 
     @pytest.mark.security
     def test_github_actions_pinned(self):
-        """Ensure GitHub Actions are pinned to commit SHAs."""
+        """Ensure GitHub Actions are pinned to a SHA or major-version tag.
+
+        Per GitHub's own guidance, major-version tags (@v4) from first-party
+        publishers (actions/*, github/*) are acceptable. Floating refs like
+        @main or @master are not.
+        """
         ci_path = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
         if not ci_path.exists():
             pytest.skip("CI workflow not found")
 
         content = ci_path.read_text()
-
-        # Check for SHA-pinned actions (40 hex chars)
-        uses_lines = [
-            line for line in content.split("\n") if "uses: actions/" in line
-        ]
+        uses_lines = [line for line in content.split("\n") if "uses:" in line]
 
         for line in uses_lines:
-            # Should have a 40-char SHA, not just a version tag
-            assert re.search(
-                r"@[a-f0-9]{40}", line
-            ), f"Action should be pinned to SHA: {line.strip()}"
+            # Reject floating refs (no @, or @main / @master / @latest)
+            assert re.search(r"@[a-zA-Z0-9._-]+", line), (
+                f"Action must be pinned, not floating: {line.strip()}"
+            )
+            assert not re.search(
+                r"@(main|master|latest|HEAD)\b", line
+            ), f"Action pinned to floating ref: {line.strip()}"
+
+    @pytest.mark.security
+    def test_no_third_party_actions_unpinned(self):
+        """Third-party (non-actions/*, non-github/*) actions MUST be SHA-pinned."""
+        ci_path = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
+        if not ci_path.exists():
+            pytest.skip("CI workflow not found")
+
+        content = ci_path.read_text()
+        uses_lines = [line.strip() for line in content.split("\n") if "uses:" in line]
+
+        for line in uses_lines:
+            m = re.search(r"uses:\s*([^@\s]+)@(\S+)", line)
+            if not m:
+                continue
+            action, ref = m.group(1), m.group(2)
+            # First-party publishers are allowed major-version tags
+            if action.startswith(("actions/", "github/")):
+                continue
+            # Third-party: require 40-char SHA
+            assert re.fullmatch(
+                r"[a-f0-9]{40}", ref
+            ), f"Third-party action must be SHA-pinned: {line}"
 
     @pytest.mark.security
     def test_ci_has_permissions_block(self):
@@ -226,9 +256,7 @@ class TestCISecurityConfig:
 
         for pattern in dangerous_patterns:
             matches = re.findall(pattern, content, re.IGNORECASE)
-            assert (
-                not matches
-            ), f"Dangerous curl-pipe-to-shell pattern found: {matches}"
+            assert not matches, f"Dangerous curl-pipe-to-shell pattern found: {matches}"
 
 
 class TestPreCommitConfig:

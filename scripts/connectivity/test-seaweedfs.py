@@ -25,6 +25,7 @@ from datetime import datetime
 try:
     import boto3
     from botocore.client import Config
+
     BOTO3_AVAILABLE = True
 except ImportError:
     boto3 = None  # type: ignore
@@ -43,12 +44,12 @@ def get_s3_client():
 
     # SeaweedFS S3 endpoint - adjust if needed
     return boto3.client(
-        's3',
-        endpoint_url='http://localhost:8333',
-        aws_access_key_id='admin',  # Default SeaweedFS credentials
-        aws_secret_access_key='admin',
-        config=Config(signature_version='s3v4'),
-        region_name='us-east-1'
+        "s3",
+        endpoint_url="http://localhost:8333",
+        aws_access_key_id="admin",  # Default SeaweedFS credentials
+        aws_secret_access_key="admin",
+        config=Config(signature_version="s3v4"),
+        region_name="us-east-1",
     )
 
 
@@ -64,17 +65,17 @@ def test_s3_connectivity(s3_client):
 
     try:
         response = s3_client.list_buckets()
-        buckets = [b['Name'] for b in response.get('Buckets', [])]
-        print(f"  Connected to SeaweedFS S3")
+        buckets = [b["Name"] for b in response.get("Buckets", [])]
+        print("  Connected to SeaweedFS S3")
         print(f"  Buckets found: {buckets}")
 
         # Check for lakehouse bucket
-        if 'lakehouse' in buckets:
+        if "lakehouse" in buckets:
             print("  ✅ 'lakehouse' bucket exists")
             return True
         else:
             print("  ⚠️  'lakehouse' bucket not found - creating it")
-            s3_client.create_bucket(Bucket='lakehouse')
+            s3_client.create_bucket(Bucket="lakehouse")
             print("  ✅ Created 'lakehouse' bucket")
             return True
 
@@ -121,7 +122,9 @@ def test_iceberg_write(spark):
         print("  Inserted 5 test records")
 
         # Verify data
-        count = spark.sql("SELECT COUNT(*) as cnt FROM iceberg.test_storage.s3_test").collect()[0]['cnt']
+        count = spark.sql(
+            "SELECT COUNT(*) as cnt FROM iceberg.test_storage.s3_test"
+        ).collect()[0]["cnt"]
         print(f"  Verified row count: {count}")
 
         if count == 5:
@@ -151,8 +154,8 @@ def test_s3_file_verification(s3_client, spark):
         metadata = spark.sql("DESCRIBE EXTENDED iceberg.test_storage.s3_test").collect()
         location = None
         for row in metadata:
-            if row['col_name'] == 'Location':
-                location = row['data_type']
+            if row["col_name"] == "Location":
+                location = row["data_type"]
                 break
 
         if not location:
@@ -163,29 +166,31 @@ def test_s3_file_verification(s3_client, spark):
 
         # Parse S3 path
         # Format: s3a://bucket/path or s3://bucket/path
-        if location.startswith('s3a://'):
+        if location.startswith("s3a://"):
             path = location[6:]  # Remove s3a://
-        elif location.startswith('s3://'):
+        elif location.startswith("s3://"):
             path = location[5:]  # Remove s3://
         else:
             print(f"  ⚠️  Unexpected location format: {location}")
             path = location
 
-        parts = path.split('/', 1)
+        parts = path.split("/", 1)
         bucket = parts[0]
-        prefix = parts[1] if len(parts) > 1 else ''
+        prefix = parts[1] if len(parts) > 1 else ""
 
         print(f"  Bucket: {bucket}, Prefix: {prefix}")
 
         # List objects in table location
         response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
-        objects = response.get('Contents', [])
+        objects = response.get("Contents", [])
 
         print(f"  Found {len(objects)} objects in S3")
 
         # Categorize files
-        data_files = [o for o in objects if '/data/' in o['Key'] and o['Key'].endswith('.parquet')]
-        metadata_files = [o for o in objects if '/metadata/' in o['Key']]
+        data_files = [
+            o for o in objects if "/data/" in o["Key"] and o["Key"].endswith(".parquet")
+        ]
+        metadata_files = [o for o in objects if "/metadata/" in o["Key"]]
 
         print(f"  Data files (parquet): {len(data_files)}")
         print(f"  Metadata files: {len(metadata_files)}")
@@ -193,7 +198,7 @@ def test_s3_file_verification(s3_client, spark):
         if data_files:
             print("\n  Sample data files:")
             for f in data_files[:3]:
-                size_kb = f['Size'] / 1024
+                size_kb = f["Size"] / 1024
                 print(f"    - {f['Key'].split('/')[-1]} ({size_kb:.1f} KB)")
 
         if metadata_files:
@@ -211,6 +216,7 @@ def test_s3_file_verification(s3_client, spark):
     except Exception as e:
         print(f"  ❌ S3 verification failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -230,8 +236,8 @@ def test_read_parquet_direct(s3_client, spark):
         metadata = spark.sql("DESCRIBE EXTENDED iceberg.test_storage.s3_test").collect()
         location = None
         for row in metadata:
-            if row['col_name'] == 'Location':
-                location = row['data_type']
+            if row["col_name"] == "Location":
+                location = row["data_type"]
                 break
 
         if not location:
@@ -250,13 +256,17 @@ def test_read_parquet_direct(s3_client, spark):
         direct_df.show(3, truncate=False)
 
         # Compare with Iceberg read
-        iceberg_count = spark.sql("SELECT COUNT(*) FROM iceberg.test_storage.s3_test").collect()[0][0]
+        iceberg_count = spark.sql(
+            "SELECT COUNT(*) FROM iceberg.test_storage.s3_test"
+        ).collect()[0][0]
 
         if direct_count == iceberg_count:
             print(f"  ✅ Counts match: direct={direct_count}, iceberg={iceberg_count}")
             return True
         else:
-            print(f"  ⚠️  Count mismatch: direct={direct_count}, iceberg={iceberg_count}")
+            print(
+                f"  ⚠️  Count mismatch: direct={direct_count}, iceberg={iceberg_count}"
+            )
             print("      (This may be expected due to delete files)")
             return True  # Still pass - Iceberg may have delete files
 
@@ -274,12 +284,16 @@ def test_metadata_consistency(spark):
     try:
         # Check snapshots
         print("  Checking snapshots:")
-        snapshots = spark.sql("SELECT * FROM iceberg.test_storage.s3_test.snapshots").collect()
+        snapshots = spark.sql(
+            "SELECT * FROM iceberg.test_storage.s3_test.snapshots"
+        ).collect()
         print(f"    Snapshots: {len(snapshots)}")
 
         # Check history
         print("\n  Checking history:")
-        history = spark.sql("SELECT * FROM iceberg.test_storage.s3_test.history").collect()
+        history = spark.sql(
+            "SELECT * FROM iceberg.test_storage.s3_test.history"
+        ).collect()
         print(f"    History entries: {len(history)}")
 
         # Check files
@@ -289,7 +303,9 @@ def test_metadata_consistency(spark):
 
         # Check partitions
         print("\n  Checking partitions:")
-        partitions = spark.sql("SELECT * FROM iceberg.test_storage.s3_test.partitions").collect()
+        partitions = spark.sql(
+            "SELECT * FROM iceberg.test_storage.s3_test.partitions"
+        ).collect()
         print(f"    Partitions: {len(partitions)}")
 
         for p in partitions:
@@ -328,9 +344,7 @@ def main():
     print("=" * 60)
 
     # Initialize
-    spark = SparkSession.builder \
-        .appName("SeaweedFS-Test") \
-        .getOrCreate()
+    spark = SparkSession.builder.appName("SeaweedFS-Test").getOrCreate()
     spark.sparkContext.setLogLevel("WARN")
 
     s3_client = get_s3_client()
@@ -338,14 +352,14 @@ def main():
     results = {}
 
     # Run tests
-    results['s3_connectivity'] = test_s3_connectivity(s3_client)
-    results['iceberg_write'] = test_iceberg_write(spark)
-    results['s3_verification'] = test_s3_file_verification(s3_client, spark)
-    results['direct_parquet'] = test_read_parquet_direct(s3_client, spark)
-    results['metadata_consistency'] = test_metadata_consistency(spark)
+    results["s3_connectivity"] = test_s3_connectivity(s3_client)
+    results["iceberg_write"] = test_iceberg_write(spark)
+    results["s3_verification"] = test_s3_file_verification(s3_client, spark)
+    results["direct_parquet"] = test_read_parquet_direct(s3_client, spark)
+    results["metadata_consistency"] = test_metadata_consistency(spark)
 
     # Cleanup
-    if '--no-cleanup' not in sys.argv:
+    if "--no-cleanup" not in sys.argv:
         cleanup(spark)
 
     # Summary
