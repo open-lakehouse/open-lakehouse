@@ -158,10 +158,9 @@ The upstream `lakehouse-stack` repo supports multiple Spark versions, two catalo
 
 ## Contributing
 
-- Branch from `main`, PR to `main`.
-- New demos should ship with a matching template-format README. Use [`demos/_template/`](demos/_template/) as the starting point.
-- Don't add code that hits the old PostgreSQL JDBC catalog path — Unity Catalog OSS is the only catalog mode.
-- Don't add a `--spark-local` implementation in pieces; build it as one coherent change when the time comes.
+See [CONTRIBUTING.md](CONTRIBUTING.md) — has separate sections for humans and for AI agents (the conventions for `.claude/skills/`, the demo contract, and what not to fabricate are non-obvious enough to deserve their own write-up).
+
+Community standards: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## License
 

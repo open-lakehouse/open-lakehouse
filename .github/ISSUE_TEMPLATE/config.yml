@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Conduct concern
+    url: https://github.com/open-lakehouse/open-lakehouse/security/advisories/new
+    about: Private channel for code-of-conduct concerns. Do not file as a public issue.
+  - name: Security vulnerability
+    url: https://github.com/open-lakehouse/open-lakehouse/security/advisories/new
+    about: Report security issues privately. See SECURITY.md.
