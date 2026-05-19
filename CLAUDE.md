@@ -4,7 +4,9 @@ You are helping with **open-lakehouse**, a composable OSS lakehouse demo platfor
 
 ## Stack
 
-Spark 4.1 · Kafka 3.6 · Airflow 3.1 · Iceberg 1.10 · Delta 4.0 · Unity Catalog OSS 0.4.x · MLflow 3.1 · SeaweedFS (S3) · PostgreSQL.
+Spark 4.1 (Connect-first) · Kafka 3.6 · Airflow 3.1 · Iceberg 1.10 + Delta 4.0 (both extensions enabled by default) · Unity Catalog OSS 0.4.x · MLflow 3.1 · SeaweedFS (S3) · PostgreSQL.
+
+Catalog naming: Iceberg tables live under `iceberg.<schema>.<table>` (UC REST). Delta tables live under `spark_catalog.<schema>.<table>` (DeltaCatalog overrides the Spark default).
 
 Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Databricks-managed destination in `terraform-databricks/`.
 

@@ -9,18 +9,23 @@
 # Copy to spark-defaults.conf and fill in your S3 credentials.
 
 # ============================================================================
-# Iceberg + Unity Catalog REST Configuration
+# Iceberg + Delta extensions (both enabled by default)
 # ============================================================================
-spark.sql.extensions                      org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+# Order matters: Iceberg first, Delta second.
+spark.sql.extensions                      org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,io.delta.sql.DeltaSparkSessionExtension
 
-# Primary catalog via Unity Catalog REST endpoint
+# Iceberg via Unity Catalog REST endpoint (named catalog: `iceberg`)
 spark.sql.catalog.iceberg                 org.apache.iceberg.spark.SparkCatalog
 spark.sql.catalog.iceberg.catalog-impl    org.apache.iceberg.rest.RESTCatalog
 spark.sql.catalog.iceberg.uri             http://localhost:8081/api/2.1/unity-catalog/iceberg
 spark.sql.catalog.iceberg.warehouse       unity
 spark.sql.catalog.iceberg.token           not_used
 
-# Set default catalog (optional)
+# Delta on the default Spark catalog (named catalog: `spark_catalog`)
+# Delta tables are addressed via spark_catalog.<schema>.<table> or path-based.
+spark.sql.catalog.spark_catalog           org.apache.spark.sql.delta.catalog.DeltaCatalog
+
+# Set default catalog (optional — Iceberg is the medallion path for this stack)
 # spark.sql.defaultCatalog                iceberg
 
 # ============================================================================
@@ -39,8 +44,9 @@ spark.hadoop.fs.s3a.connection.ssl.enabled false
 # ============================================================================
 # Required JARs
 # ============================================================================
-# Iceberg REST catalog requires the iceberg-spark-runtime JAR
-spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar
+# Iceberg + Delta runtimes + Hadoop/AWS S3 connector. All downloaded by
+# `./lakehouse setup` (scripts/tools/download-jars.sh) into ./jars/.
+spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/delta-spark_2.13-4.0.1.jar,/opt/spark/jars-extra/delta-storage-4.0.1.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar
 
 # ============================================================================
 # Performance Tuning
