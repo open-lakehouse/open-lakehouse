@@ -312,22 +312,48 @@ wait_for_services() {
 
 # Fixed Spark 4.1 constants (this repo is Spark-4.1-only)
 SPARK_VERSION="4.1"
-get_spark_compose()          { echo "docker-compose-spark41.yml"; }
-get_spark_master_container() { echo "spark-master-41"; }
-get_spark_worker_container() { echo "spark-worker-41"; }
-get_spark_port()             { echo "7078"; }
-get_spark_ui_port()          { echo "8082"; }
+get_spark_compose()           { echo "docker-compose-spark41.yml"; }
+get_spark_master_container()  { echo "spark-master-41"; }
+get_spark_worker_container()  { echo "spark-worker-41"; }
+get_spark_connect_container() { echo "spark-connect-41"; }
+get_spark_port()              { echo "7078"; }
+get_spark_ui_port()           { echo "8082"; }
+get_spark_connect_port()      { echo "15002"; }
+get_spark_remote()            { echo "sc://localhost:$(get_spark_connect_port)"; }
 
 # Global flags
 JSON_OUTPUT=false
+SPARK_MODE="connect"   # connect (default) | local (not yet implemented)
+ARGS=()                # positional args after flag-stripping
 
 parse_flags() {
+    ARGS=()
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --json) JSON_OUTPUT=true; shift ;;
-            *)      shift ;;
+            --json)          JSON_OUTPUT=true; shift ;;
+            --spark-connect) SPARK_MODE="connect"; shift ;;
+            --spark-local)   SPARK_MODE="local"; shift ;;
+            *)               ARGS+=("$1"); shift ;;
         esac
     done
+}
+
+# Refuse local mode for now — placeholder for future in-process Spark
+require_connect_mode() {
+    if [ "$SPARK_MODE" = "local" ]; then
+        echo -e "${YELLOW}!${NC} --spark-local is not yet implemented in this build."
+        echo -e "  Connect-first architecture is the default. Re-run without --spark-local."
+        echo -e "  Local mode (in-process Spark, no Docker) is on the roadmap; see demos/local-mode-spark/README.md"
+        exit 2
+    fi
+}
+
+# Export Spark transport hints for downstream tooling / demos
+export_spark_env() {
+    export LAKEHOUSE_SPARK_MODE="$SPARK_MODE"
+    if [ "$SPARK_MODE" = "connect" ]; then
+        export LAKEHOUSE_SPARK_REMOTE="$(get_spark_remote)"
+    fi
 }
 
 # Header
@@ -387,6 +413,8 @@ cmd_status_json() {
     local s3_ok=$(is_service_healthy 8333 && echo "true" || echo "false")
     local spark_master=$(is_container_running "spark-master-41" && echo "true" || echo "false")
     local spark_worker=$(is_container_running "spark-worker-41" && echo "true" || echo "false")
+    local spark_connect=$(is_container_running "spark-connect-41" && echo "true" || echo "false")
+    local connect_grpc=$(is_service_healthy "$(get_spark_connect_port)" && echo "true" || echo "false")
     local kafka_ok=$(is_container_running "kafka" && echo "true" || echo "false")
     local zk_ok=$(is_container_running "zookeeper" && echo "true" || echo "false")
     local uc_ok=$(is_container_running "unity-catalog" && echo "true" || echo "false")
@@ -396,6 +424,7 @@ cmd_status_json() {
 
     cat <<EOF
 {
+  "mode": "$SPARK_MODE",
   "services": {
     "postgresql": $pg_ok,
     "seaweedfs": $s3_ok,
@@ -405,7 +434,10 @@ cmd_status_json() {
   "spark": {
     "version": "4.1",
     "master": $spark_master,
-    "worker": $spark_worker
+    "worker": $spark_worker,
+    "connect_container": $spark_connect,
+    "connect_grpc_listening": $connect_grpc,
+    "remote": "$(get_spark_remote)"
   },
   "kafka": {
     "broker": $kafka_ok,
@@ -415,7 +447,7 @@ cmd_status_json() {
     "webserver": $airflow_web,
     "scheduler": $airflow_sched
   },
-  "all_healthy": $([ "$pg_ok" = "true" ] && [ "$s3_ok" = "true" ] && [ "$spark_master" = "true" ] && echo "true" || echo "false")
+  "all_healthy": $([ "$pg_ok" = "true" ] && [ "$s3_ok" = "true" ] && [ "$spark_master" = "true" ] && [ "$connect_grpc" = "true" ] && echo "true" || echo "false")
 }
 EOF
 }
@@ -431,9 +463,11 @@ cmd_status_human() {
     echo -e "\n${YELLOW}Unity Catalog:${NC}"
     check_container "unity-catalog" && check_service uc 8081 "Unity Catalog REST API" || true
 
-    echo -e "\n${YELLOW}Spark 4.1 Containers:${NC}"
+    echo -e "\n${YELLOW}Spark 4.1 (Connect-first):${NC}"
     check_container "spark-master-41" && docker exec spark-master-41 /opt/spark/bin/spark-submit --version 2>&1 | grep "version" | head -1 || true
     check_container "spark-worker-41" || true
+    check_container "spark-connect-41" && check_service connect "$(get_spark_connect_port)" "Spark Connect gRPC" || true
+    echo -e "  Spark Connect endpoint: ${BLUE}$(get_spark_remote)${NC}"
 
     echo -e "\n${YELLOW}Kafka Containers:${NC}"
     check_container "kafka" || true
@@ -452,6 +486,7 @@ cmd_status_human() {
     echo "  SeaweedFS:        8333"
     echo "  Unity Catalog:    8081 (REST API + Iceberg endpoint)"
     echo "  Spark 4.1:        7078, 8082 (UI), 8083 (Worker UI)"
+    echo "  Spark Connect:    15002 (gRPC)"
     echo "  Kafka:            9092"
     echo "  Zookeeper:        2181"
     echo "  Airflow:          8085 (UI)"
@@ -588,8 +623,10 @@ cmd_start() {
 
     case $service in
         spark|all)
-            echo -e "${YELLOW}Starting Spark 4.1 (port $spark_port)...${NC}"
+            echo -e "${YELLOW}Starting Spark 4.1 (port $spark_port, Connect on $(get_spark_connect_port))...${NC}"
             docker compose -f "$compose_file" up -d
+            wait_for_service "Spark Connect" "nc -z localhost $(get_spark_connect_port)" 90
+            echo -e "${GREEN}Spark Connect endpoint:${NC} $(get_spark_remote)"
             ;;
     esac
 
@@ -716,6 +753,10 @@ cmd_logs() {
             echo -e "${YELLOW}Logs for $worker_container (Spark 4.1):${NC}"
             docker logs -f "$worker_container"
             ;;
+        spark-connect)
+            echo -e "${YELLOW}Logs for spark-connect-41:${NC}"
+            docker logs -f spark-connect-41
+            ;;
         kafka)            docker logs -f kafka ;;
         zookeeper)        docker logs -f zookeeper ;;
         unity-catalog|uc) docker logs -f unity-catalog ;;
@@ -724,7 +765,7 @@ cmd_logs() {
         airflow-scheduler|airflow-sched)  docker logs -f airflow-scheduler ;;
         airflow-triggerer)                docker logs -f airflow-triggerer ;;
         *)
-            echo "Usage: lakehouse logs [spark-master|spark-worker|kafka|zookeeper|unity-catalog|mlflow|airflow-webserver|airflow-scheduler|airflow-triggerer]"
+            echo "Usage: lakehouse logs [spark-master|spark-worker|spark-connect|kafka|zookeeper|unity-catalog|mlflow|airflow-webserver|airflow-scheduler|airflow-triggerer]"
             exit 1
             ;;
     esac
@@ -787,6 +828,15 @@ cmd_test() {
     else
         echo -e "   ${RED}✗${NC} Spark container not running ($master_container)"
         echo -e "   ${YELLOW}→ Run: ./lakehouse start spark${NC}"
+        ((failures++))
+    fi
+
+    echo -e "\n${YELLOW}4b. Testing Spark Connect gRPC...${NC}"
+    if nc -z localhost "$(get_spark_connect_port)" 2>/dev/null; then
+        echo -e "   ${GREEN}✓${NC} Spark Connect listening on $(get_spark_remote)"
+    else
+        echo -e "   ${RED}✗${NC} Spark Connect not reachable on port $(get_spark_connect_port)"
+        echo -e "   ${YELLOW}→ Check: docker logs spark-connect-41${NC}"
         ((failures++))
     fi
 
@@ -1231,7 +1281,11 @@ cmd_help() {
     cat <<'EOF'
 open-lakehouse — demo platform CLI
 
-Usage: lakehouse <command> [options]
+Usage: lakehouse [--spark-connect|--spark-local] [--json] <command> [args]
+
+Spark transport:
+  --spark-connect    (default) Use Spark Connect (sc://localhost:15002) — Connect-first architecture
+  --spark-local      In-process Spark, no Docker cluster — NOT YET IMPLEMENTED
 
 Commands:
   setup               Validate environment and install dependencies
@@ -1288,53 +1342,36 @@ EOF
 
 # Main
 parse_flags "$@"
+export_spark_env
+
+# Re-bind positional args to the flag-stripped list so `case $1` sees the command.
+set -- "${ARGS[@]}"
+
+# Let `help` and `status` bypass the local-mode guard so users can inspect state
+# without committing to a transport. All other commands enforce connect-only.
+case ${1:-help} in
+    help|status|''|-h|--help) ;;
+    *) require_connect_mode ;;
+esac
 
 case ${1:-help} in
-    setup)
-        cmd_setup
-        ;;
-    check-config)
-        cmd_check_config
-        ;;
-    preflight)
-        cmd_preflight
-        ;;
-    migrate)
-        cmd_migrate "${@:2}"
-        ;;
-    status)
-        cmd_status
-        ;;
-    start)
-        cmd_start ${2:-all}
-        ;;
-    stop)
-        cmd_stop ${2:-all}
-        ;;
+    setup)        cmd_setup ;;
+    check-config) cmd_check_config ;;
+    preflight)    cmd_preflight ;;
+    migrate)      cmd_migrate "${@:2}" ;;
+    status)       cmd_status ;;
+    start)        cmd_start "${2:-all}" ;;
+    stop)         cmd_stop "${2:-all}" ;;
     restart)
-        cmd_stop ${2:-all}
+        cmd_stop "${2:-all}"
         sleep 2
-        cmd_start ${2:-all}
+        cmd_start "${2:-all}"
         ;;
-    logs)
-        cmd_logs $2
-        ;;
-    test)
-        cmd_test
-        ;;
-    producer)
-        cmd_producer
-        ;;
-    consumer)
-        cmd_consumer
-        ;;
-    testdata)
-        cmd_testdata "${@:2}"
-        ;;
-    browsedata)
-        browse_tables "$2"
-        ;;
-    help|*)
-        cmd_help
-        ;;
+    logs)         cmd_logs "$2" ;;
+    test)         cmd_test ;;
+    producer)     cmd_producer ;;
+    consumer)     cmd_consumer ;;
+    testdata)     cmd_testdata "${@:2}" ;;
+    browsedata)   browse_tables "$2" ;;
+    help|*)       cmd_help ;;
 esac

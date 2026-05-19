@@ -41,6 +41,11 @@ class TestComposeFiles:
 class TestDirectories:
     EXPECTED_DIRS = (
         "demos",
+        "demos/_template",
+        "demos/sdp-medallion",
+        "demos/unity-catalog-multi-engine",
+        "demos/realtime-mode",
+        "demos/local-mode-spark",
         "docs",
         "scripts",
         "scripts/tools",
@@ -60,6 +65,38 @@ class TestDirectories:
     def test_expected_dirs_exist(self):
         for d in self.EXPECTED_DIRS:
             assert (PROJECT_ROOT / d).is_dir(), f"missing directory: {d}"
+
+    def test_dropped_demos_are_absent(self):
+        dropped = (
+            "streaming-kafka-to-iceberg",
+            "delta-vs-iceberg",
+            "mlflow-tracking",
+            "airflow-orchestration",
+        )
+        for d in dropped:
+            assert not (PROJECT_ROOT / "demos" / d).exists(), \
+                f"old demo dir should not exist: demos/{d}"
+
+
+class TestConnectFirst:
+    """Connect-first architecture invariants."""
+
+    def test_compose_defines_connect_service(self):
+        compose = (PROJECT_ROOT / "docker-compose-spark41.yml").read_text()
+        assert "spark-connect-41" in compose, "spark-connect-41 service missing"
+        assert "15002" in compose, "Connect gRPC port 15002 missing"
+
+    def test_cli_documents_flag(self):
+        cli = (PROJECT_ROOT / "lakehouse").read_text()
+        assert "--spark-connect" in cli, "--spark-connect flag missing in CLI"
+        assert "--spark-local" in cli, "--spark-local stub missing in CLI"
+        assert "LAKEHOUSE_SPARK_REMOTE" in cli, "Spark remote env var not exported"
+
+    def test_local_mode_demo_placeholder_exists(self):
+        readme = PROJECT_ROOT / "demos" / "local-mode-spark" / "README.md"
+        assert readme.exists(), "demos/local-mode-spark/README.md must back the CLI message"
+        content = readme.read_text()
+        assert "NOT YET IMPLEMENTED" in content, "Placeholder must flag deferred state"
 
 
 class TestAIScaffolding:

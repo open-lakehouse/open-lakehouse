@@ -39,16 +39,20 @@ Expected: `All preflight checks passed`. This verifies PostgreSQL is reachable, 
 
 **Failure branch — port already in use**: read which port. If it's our container from a previous run (`docker ps`), preflight already accepts it. If it's a foreign process, ask the user to free the port before continuing.
 
-## Step 3 — core services (60–90s)
+## Step 3 — core services (90–120s with first-run package downloads)
 
 ```bash
-./lakehouse start all          # starts Spark 4.1 + Kafka
+./lakehouse start all          # Spark 4.1 master + worker + Connect server + Kafka
 ./lakehouse start unity-catalog
 ./lakehouse start mlflow
 ./lakehouse start airflow      # optional, only if demoing orchestration
 ```
 
+`start all` now brings up the **Spark Connect server** (container `spark-connect-41`, gRPC on port 15002) alongside the master and worker. First start pulls `spark-connect_2.13:4.1.0` from Maven on the connect container — that adds ~30s. Subsequent starts hit the local Ivy cache.
+
 Order matters: Spark and Kafka can start in parallel; Unity Catalog should be up before any Spark job that talks to the catalog; Airflow depends on Postgres which is external (system PostgreSQL on port 5432).
+
+The CLI exports `LAKEHOUSE_SPARK_REMOTE=sc://localhost:15002` and `LAKEHOUSE_SPARK_MODE=connect`. Demos should read these instead of hardcoding the endpoint.
 
 ## Step 4 — verify (15s)
 
@@ -56,7 +60,7 @@ Order matters: Spark and Kafka can start in parallel; Unity Catalog should be up
 ./lakehouse status --json | jq .all_healthy
 ```
 
-Expected: `true`. If `false`, the JSON shows which subsystem is down.
+Expected: `true`. The healthcheck now requires `spark.connect_grpc_listening: true` in addition to master/PostgreSQL/SeaweedFS — if `all_healthy` is false, check the JSON for which one's red. Spark Connect takes the longest to come up; if it's the only failure, give it another 30s.
 
 ```bash
 ./lakehouse test
@@ -74,7 +78,7 @@ Writes one row to `iceberg.bronze._smoke`, reads it back, drops the table. If th
 
 ## What "started" looks like
 
-A healthy `./lakehouse status` shows green checks for: PostgreSQL, SeaweedFS, Unity Catalog REST, `spark-master-41`, `spark-worker-41`, `kafka`, `zookeeper`, and (if started) airflow + mlflow.
+A healthy `./lakehouse status` shows green checks for: PostgreSQL, SeaweedFS, Unity Catalog REST, `spark-master-41`, `spark-worker-41`, `spark-connect-41` (gRPC listening on 15002), `kafka`, `zookeeper`, and (if started) airflow + mlflow.
 
 ## After start
 

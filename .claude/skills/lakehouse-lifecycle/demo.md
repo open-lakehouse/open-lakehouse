@@ -37,16 +37,14 @@ cat demos/README.md             # human-readable index
 
 The currently-shipped placeholder demos are:
 
-| Demo | Purpose (sketch) |
-|------|------------------|
-| `streaming-kafka-to-iceberg` | Stream Kafka events into an Iceberg table via Structured Streaming |
-| `sdp-medallion` | Bronze → Silver → Gold via Spark Declarative Pipelines |
-| `delta-vs-iceberg` | Same workload on Delta and Iceberg side-by-side |
-| `unity-catalog-multi-engine` | UC OSS as a single catalog for Spark and DuckDB |
-| `mlflow-tracking` | Log Spark ML experiments to MLflow tracking + AI Gateway |
-| `airflow-orchestration` | Airflow 3.1 DAG orchestrating Spark + Kafka + UC |
+| Demo | Transport | Purpose (sketch) |
+|------|-----------|------------------|
+| `sdp-medallion` | `spark-pipelines` (Connect-backed) | Bronze → Silver → Gold via Spark Declarative Pipelines |
+| `unity-catalog-multi-engine` | Spark Connect + DuckDB | UC OSS as a single catalog for Spark and DuckDB |
+| `realtime-mode` | Spark Connect (Structured Streaming) | Kafka → Iceberg streaming with watermarked dedup |
+| `local-mode-spark` | Local (no cluster) — **not yet implemented** | In-process Spark for laptop demos (placeholder for `--spark-local`) |
 
-Each is a `.gitkeep` placeholder in the initial commit — content arrives demo-by-demo.
+All but `local-mode-spark` are `.gitkeep` placeholders in this commit — content arrives demo-by-demo. The local-mode demo ships a README explaining the deferred state.
 
 ## When a demo doesn't exist yet
 

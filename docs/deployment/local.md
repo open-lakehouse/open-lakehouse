@@ -57,6 +57,7 @@ Required:
 | PostgreSQL | 5432 | - |
 | SeaweedFS | 8333 | - |
 | Spark 4.1 Master | 7078 | http://localhost:8082 |
+| Spark Connect (gRPC) | 15002 | - |
 | Kafka | 9092 | - |
 | Zookeeper | 2181 | - |
 | Unity Catalog | 8081 | REST API |

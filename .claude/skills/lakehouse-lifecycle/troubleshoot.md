@@ -8,6 +8,10 @@ Match the user-reported symptom to a row, then run the diagnostic. If diagnostic
 |---------|-----------|------------|
 | `lakehouse start all` exits before Docker logs | `./lakehouse preflight` | A port is held by a foreign process. `lsof -i :<port>` to find it. |
 | Spark master starts but `lakehouse test` says "Spark not responding" | `docker logs spark-master-41 \| tail -50` | Usually a JAR mismatch. Re-run `./lakehouse setup` to re-verify JARs. |
+| `spark-connect-41` keeps restarting | `docker logs spark-connect-41 \| tail -100` | Most common: master URL unreachable (race vs. master start). The compose has `depends_on` + `sleep 10` but on slow hardware bump the sleep. Second most common: `--packages` download failed — pre-warm by running `docker exec spark-connect-41 ls /root/.ivy2/cache/`. |
+| Client gets `UNAVAILABLE: io exception` from `sc://localhost:15002` | `nc -z localhost 15002` then `docker ps \| grep connect` | Connect server isn't listening. Check container is up and not crash-looping. |
+| SDP pipeline fails with `NoClassDefFoundError: SparkConnectGraphElementRegistry` | n/a | The cluster's Spark version doesn't include Connect, or the Connect server didn't start. SDP requires Connect — verify `./lakehouse status --json \| jq .spark.connect_grpc_listening` is true before running `spark-pipelines`. |
+| `./lakehouse --spark-local <anything>` exits with not-implemented | Read the message | This is intentional. Local mode is roadmap, not built. Drop the flag (Connect is the default). |
 | Iceberg writes fail with "S3 access denied" | Check `.env` `S3_ACCESS_KEY`/`S3_SECRET_KEY` vs `config/unity-catalog/server.properties` | UC OSS credential vending mismatch. Both must reference the same SeaweedFS keys. |
 | `unity-catalog` container restarts in a loop | `docker logs unity-catalog \| tail -100` | Most common: PostgreSQL not reachable. UC OSS uses Postgres as its metastore. Ensure `5432` is up. |
 | Airflow webserver returns 502 | `docker logs airflow-webserver \| tail -50` and `docker logs airflow-scheduler` | Often: Postgres unreachable, or the airflow-init container failed. Re-run `./lakehouse start airflow`. |

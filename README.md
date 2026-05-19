@@ -26,11 +26,21 @@ git clone https://github.com/open-lakehouse/open-lakehouse
 cd open-lakehouse
 
 ./lakehouse setup          # validate env, install deps, download ~860MB of JARs
-./lakehouse start all      # Spark 4.1 + Kafka
+./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
 ./lakehouse start unity-catalog
 ./lakehouse start mlflow
-./lakehouse status --json  # confirm healthy
+./lakehouse status --json  # confirm healthy (incl. Spark Connect gRPC)
+
+# Connect to the cluster from any Python:
+#   from pyspark.sql import SparkSession
+#   spark = SparkSession.builder.remote("sc://localhost:15002").getOrCreate()
 ```
+
+## Transport: Connect-first
+
+Default mode is `--spark-connect`. The Spark Connect server runs in container `spark-connect-41` (gRPC on `:15002`). Clients use `SparkSession.builder.remote("sc://localhost:15002")`. Spark Declarative Pipelines (SDP) requires Connect machinery — `pyspark.pipelines` uses it internally.
+
+`--spark-local` (in-process Spark, no Docker) is a forward-compat stub today; the placeholder lives at `demos/local-mode-spark/`. See `docs/architecture.md` for the full transport story.
 
 For the deterministic, branch-on-failure runbook an AI agent uses, see [`.claude/skills/lakehouse-lifecycle/start.md`](.claude/skills/lakehouse-lifecycle/start.md).
 
@@ -62,14 +72,12 @@ open-lakehouse/
 
 ## Demos
 
-The `demos/` directory ships with empty placeholders:
+The `demos/` directory ships with these four placeholders (Connect-first by default):
 
-- `streaming-kafka-to-iceberg/`
-- `sdp-medallion/`
-- `delta-vs-iceberg/`
-- `unity-catalog-multi-engine/`
-- `mlflow-tracking/`
-- `airflow-orchestration/`
+- `sdp-medallion/` — Bronze → Silver → Gold via Spark Declarative Pipelines (`spark-pipelines`, Connect-backed)
+- `unity-catalog-multi-engine/` — One catalog, multiple engines (Spark Connect + DuckDB)
+- `realtime-mode/` — Kafka → Iceberg Structured Streaming over Spark Connect
+- `local-mode-spark/` — Placeholder, **not yet implemented**; will back the `--spark-local` flag
 
 Each follows the `demos/_template/` README contract (Purpose / Prereqs / Run / Expected output / Teardown). To scaffold a new demo:
 

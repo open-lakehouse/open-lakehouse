@@ -12,9 +12,10 @@ Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Datab
 
 1. **Catalog is Unity Catalog OSS only.** No PostgreSQL JDBC catalog path exists. If you see `spark.sql.catalog.iceberg.type=jdbc` or `.jdbc.user`/`.jdbc.password`, that's a bug — fix the config, don't work around the symptom.
 2. **Spark is 4.1 only.** No `--version` flag. Compose file is `docker-compose-spark41.yml`. Master container is `spark-master-41`.
-3. **Don't `docker compose down -v` without explicit user consent.** `-v` wipes named volumes (UC metadata, MLflow runs, Airflow history). `./lakehouse stop` is safe and is what you should default to.
-4. **Empty `demos/` is intentional.** Each demo follows the contract in `demos/_template/`. Don't fabricate a demo to "fill the space" — scaffold from the template when the user asks for one.
-5. **AGENTS.md is a pointer**, not a duplicate of this file. Keep CLAUDE.md authoritative.
+3. **Connect-first transport.** Default CLI mode is `--spark-connect`. Spark Connect server runs in `spark-connect-41` on port 15002. Clients use `SparkSession.builder.remote("sc://localhost:15002")` or read `LAKEHOUSE_SPARK_REMOTE`. SDP requires Connect (pyspark.pipelines uses it internally). `--spark-local` is a stub — exits with "not yet implemented."
+4. **Don't `docker compose down -v` without explicit user consent.** `-v` wipes named volumes (UC metadata, MLflow runs, Airflow history). `./lakehouse stop` is safe and is what you should default to.
+5. **Empty `demos/` is intentional.** Each demo follows the contract in `demos/_template/`. Don't fabricate a demo to "fill the space" — scaffold from the template when the user asks for one. The four demo slots are `sdp-medallion`, `unity-catalog-multi-engine`, `realtime-mode`, and `local-mode-spark` (deferred).
+6. **AGENTS.md is a pointer**, not a duplicate of this file. Keep CLAUDE.md authoritative.
 
 ## File index — where to look for what
 
@@ -37,13 +38,17 @@ Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Datab
 
 ```bash
 ./lakehouse setup                   # validate env, install deps, download JARs
-./lakehouse start all               # Spark + Kafka
+./lakehouse start all               # Spark 4.1 master + worker + Connect + Kafka
 ./lakehouse start unity-catalog     # UC OSS REST server
 ./lakehouse start mlflow            # MLflow tracking + AI Gateway
 ./lakehouse start airflow           # Airflow scheduler + UI
-./lakehouse status --json           # machine-readable health
+./lakehouse status --json           # machine-readable health (incl. connect_grpc_listening)
 ./lakehouse test                    # connectivity tests, returns exit code
 ./lakehouse stop all                # safe stop (volumes preserved)
+
+# Spark transport flags
+./lakehouse --spark-connect start   # explicit Connect mode (same as default)
+./lakehouse --spark-local <cmd>     # exits — not yet implemented
 ```
 
 For the full deterministic runbook, see `.claude/skills/lakehouse-lifecycle/start.md`.
@@ -65,6 +70,7 @@ For the full deterministic runbook, see `.claude/skills/lakehouse-lifecycle/star
 | PostgreSQL | 5432 |
 | SeaweedFS (S3) | 8333 |
 | Spark master | 7078 (UI 8082) |
+| Spark Connect (gRPC) | 15002 |
 | Kafka | 9092 |
 | Zookeeper | 2181 |
 | Unity Catalog | 8081 |

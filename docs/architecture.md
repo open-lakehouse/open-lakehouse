@@ -14,8 +14,9 @@ System design for the open-lakehouse demo platform. Seven services, one catalog,
 │   STREAMING               │         │   COMPUTE                              │
 │                           │         │                                        │
 │   Kafka          :9092    │────────▶│   Spark 4.1   :7078 (UI :8082)         │
-│   Zookeeper      :2181    │         │                                        │
-└───────────────────────────┘         │   ┌──────┐  ┌──────┐  ┌────────┐       │
+│   Zookeeper      :2181    │         │   Spark Connect (gRPC) :15002          │
+└───────────────────────────┘         │                                        │
+                                      │   ┌──────┐  ┌──────┐  ┌────────┐       │
                                       │   │BRONZE│─▶│SILVER│─▶│  GOLD  │       │
                                       │   └──────┘  └──────┘  └────────┘       │
                                       └────────────────────┬───────────────────┘
@@ -132,12 +133,21 @@ warehouse/
 | PostgreSQL | 5432 | — |
 | SeaweedFS | 8333 | — |
 | Spark master | 7078 | 8082 (worker UI 8083) |
+| Spark Connect | 15002 | gRPC (no UI) |
 | Kafka | 9092 | — |
 | Zookeeper | 2181 | — |
 | Unity Catalog | 8081 | (REST only) |
 | Airflow | 8085 | 8085 |
 | MLflow Tracking | 5000 | 5000 |
 | MLflow AI Gateway | 5001 | — |
+
+## Transport: Connect-first
+
+The default and only supported transport is **Spark Connect**. The Connect server runs in container `spark-connect-41` and clients connect via `SparkSession.builder.remote("sc://localhost:15002")`. The `./lakehouse` CLI exports `LAKEHOUSE_SPARK_REMOTE` for downstream tools to read.
+
+This matters because **Spark Declarative Pipelines (SDP) requires Connect** — `pyspark.pipelines` uses `SparkConnectGraphElementRegistry` internally even though `spark-pipelines run` doesn't open `sc://` explicitly. Disabling the Connect server breaks the SDP demo path.
+
+A `--spark-local` flag exists on the CLI as a forward-compat stub for an eventual in-process Spark mode (no Docker, no Connect, classic SparkSession). Today it exits with "not yet implemented"; the placeholder demo lives at `demos/local-mode-spark/`.
 
 ## Version pins
 

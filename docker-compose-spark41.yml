@@ -52,6 +52,38 @@ services:
         tail -f /opt/spark/logs/*
         "
 
+  # Spark Connect server — Connect-first architecture.
+  # Required for SDP (pyspark.pipelines uses Connect internally) and the default
+  # transport for client demos. Exposes gRPC on port 15002.
+  spark-connect-41:
+    image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+    container_name: spark-connect-41
+    env_file: .env
+    network_mode: "host"
+    environment:
+      - SPARK_NO_DAEMONIZE=1
+    volumes:
+      - spark-data:/opt/spark-data
+      - ./config/spark:/opt/spark/conf
+      - ./jars:/opt/spark/jars-extra
+      - ./scripts:/scripts
+      - ./data:/data
+      - ./ivy-cache:/root/.ivy2
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    depends_on:
+      - spark-master-41
+      - spark-worker-41
+    command: >
+      bash -c "
+        sleep 10 &&
+        /opt/spark/sbin/start-connect-server.sh
+        --master spark://host.docker.internal:7078
+        --conf spark.connect.grpc.binding.port=15002
+        --conf spark.connect.grpc.binding.host=0.0.0.0
+        --packages org.apache.spark:spark-connect_2.13:4.1.0
+        "
+
 volumes:
   spark-data:
     driver: local

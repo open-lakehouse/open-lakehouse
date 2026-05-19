@@ -7,6 +7,8 @@ description: Spark Declarative Pipelines (SDP) — the declarative pipeline fram
 
 SDP is Spark's declarative pipeline framework: write Python functions decorated with `@dlt.table` / `@dlt.view`, declare expectations, and Spark runs them as a managed pipeline with topological scheduling, schema enforcement, and quality checks. SDP replaces hand-rolled `read → transform → writeTo` chains.
 
+**SDP requires Spark Connect.** `pyspark.pipelines` uses `SparkConnectGraphElementRegistry` internally for the dataflow graph, even though `spark-pipelines run` doesn't open `sc://` explicitly. In this stack the Connect server in `spark-connect-41` provides that machinery — if you see `NoClassDefFoundError` related to Connect when running a pipeline, check `./lakehouse status --json | jq .spark.connect_grpc_listening`.
+
 Authoritative reference. The user-facing `docs/guides/pipelines.md` points here.
 
 ## Sub-files (load only the one you need)

@@ -5,16 +5,25 @@ The `lakehouse` script is the single entrypoint for managing the stack. It dispa
 ## Usage
 
 ```bash
-./lakehouse <command> [options]
+./lakehouse [--spark-connect|--spark-local] [--json] <command> [args]
 ```
 
 ## Global options
 
 | Flag | Meaning |
 |------|---------|
-| `--json` | Emit machine-readable JSON (status command) |
+| `--spark-connect` | (Default) Use Spark Connect on `sc://localhost:15002`. Exports `LAKEHOUSE_SPARK_MODE=connect` and `LAKEHOUSE_SPARK_REMOTE=sc://localhost:15002`. |
+| `--spark-local` | In-process Spark mode — **not yet implemented**. The flag exists for forward-compat; using it exits with a message and pointer to `demos/local-mode-spark/`. |
+| `--json` | Emit machine-readable JSON (status command). |
 
 There is **no Spark version flag**. open-lakehouse is Spark 4.1 only; the upstream `lakehouse-stack` repo handles multi-version setups.
+
+Flags can appear before or after the command:
+
+```bash
+./lakehouse --spark-connect start all
+./lakehouse status --json
+```
 
 ## Commands
 
@@ -41,15 +50,15 @@ Runs the following steps and reports each:
 Start one of the services or all of them.
 
 ```bash
-./lakehouse start all              # Spark + Kafka
+./lakehouse start all              # Spark 4.1 master + worker + Connect + Kafka
 ./lakehouse start unity-catalog
 ./lakehouse start mlflow
 ./lakehouse start airflow
-./lakehouse start spark            # Spark only
+./lakehouse start spark            # Spark master + worker + Connect server
 ./lakehouse start kafka            # Kafka only
 ```
 
-`all` does NOT include Unity Catalog, MLflow, or Airflow — start those individually.
+`all` includes the Spark Connect server but does NOT include Unity Catalog, MLflow, or Airflow — start those individually.
 
 ### `stop [service]`
 
@@ -81,13 +90,23 @@ JSON shape:
 
 ```json
 {
+  "mode": "connect",
   "services": {"postgresql": true, "seaweedfs": true, "unity_catalog": true, "mlflow": true},
-  "spark": {"version": "4.1", "master": true, "worker": true},
+  "spark": {
+    "version": "4.1",
+    "master": true,
+    "worker": true,
+    "connect_container": true,
+    "connect_grpc_listening": true,
+    "remote": "sc://localhost:15002"
+  },
   "kafka": {"broker": true, "zookeeper": true},
   "airflow": {"webserver": true, "scheduler": true},
   "all_healthy": true
 }
 ```
+
+`all_healthy` requires `connect_grpc_listening` to be `true` — clients can't do anything useful without Connect.
 
 ### `test`
 
@@ -122,6 +141,7 @@ Tail logs for a service:
 ```bash
 ./lakehouse logs spark-master
 ./lakehouse logs spark-worker
+./lakehouse logs spark-connect
 ./lakehouse logs kafka
 ./lakehouse logs zookeeper
 ./lakehouse logs unity-catalog
