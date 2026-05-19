@@ -192,9 +192,9 @@ class TestCISecurityConfig:
 
         for line in uses_lines:
             # Reject floating refs (no @, or @main / @master / @latest)
-            assert re.search(r"@[a-zA-Z0-9._-]+", line), (
-                f"Action must be pinned, not floating: {line.strip()}"
-            )
+            assert re.search(
+                r"@[a-zA-Z0-9._-]+", line
+            ), f"Action must be pinned, not floating: {line.strip()}"
             assert not re.search(
                 r"@(main|master|latest|HEAD)\b", line
             ), f"Action pinned to floating ref: {line.strip()}"
