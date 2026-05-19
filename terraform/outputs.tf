@@ -41,9 +41,8 @@ output "rds_address" {
 }
 
 output "iceberg_catalog_uri" {
-  description = "JDBC URI for Iceberg catalog"
-  value       = "jdbc:postgresql://${aws_db_instance.catalog.endpoint}/iceberg_catalog"
-  sensitive   = true
+  description = "Unity Catalog OSS Iceberg REST endpoint (set via var.unity_catalog_uri)"
+  value       = var.unity_catalog_uri
 }
 
 output "emr_cluster_id" {
@@ -61,7 +60,7 @@ output "env_file_content" {
   description = "Content for .env file (copy to your local .env)"
   sensitive   = true
   value       = <<-EOT
-    # PostgreSQL (RDS)
+    # PostgreSQL (RDS — backs Unity Catalog OSS metastore)
     POSTGRES_USER=${var.db_username}
     POSTGRES_PASSWORD=${var.db_password}
     POSTGRES_HOST=${aws_db_instance.catalog.address}
@@ -72,8 +71,9 @@ output "env_file_content" {
     S3_BUCKET=${aws_s3_bucket.lakehouse.id}
     S3_WAREHOUSE=s3://${aws_s3_bucket.lakehouse.id}/warehouse
 
-    # Iceberg
-    ICEBERG_CATALOG_URI=jdbc:postgresql://${aws_db_instance.catalog.endpoint}/iceberg_catalog
+    # Iceberg via Unity Catalog OSS
+    UNITY_CATALOG_URI=${var.unity_catalog_uri}
+    UNITY_CATALOG_TOKEN=${var.unity_catalog_token}
     ICEBERG_WAREHOUSE=s3://${aws_s3_bucket.lakehouse.id}/warehouse
   EOT
 }

@@ -366,13 +366,13 @@ resource "aws_emr_cluster" "lakehouse" {
     {
       Classification = "spark-defaults"
       Properties = {
-        "spark.sql.catalog.iceberg"                = "org.apache.iceberg.spark.SparkCatalog"
-        "spark.sql.catalog.iceberg.type"           = "jdbc"
-        "spark.sql.catalog.iceberg.uri"            = "jdbc:postgresql://${aws_db_instance.catalog.endpoint}/iceberg_catalog"
-        "spark.sql.catalog.iceberg.jdbc.user"      = var.db_username
-        "spark.sql.catalog.iceberg.jdbc.password"  = var.db_password
-        "spark.sql.catalog.iceberg.warehouse"      = "s3://${aws_s3_bucket.lakehouse.id}/warehouse"
-        "spark.sql.adaptive.enabled"               = "true"
+        "spark.sql.extensions"                       = "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions"
+        "spark.sql.catalog.iceberg"                  = "org.apache.iceberg.spark.SparkCatalog"
+        "spark.sql.catalog.iceberg.catalog-impl"     = "org.apache.iceberg.rest.RESTCatalog"
+        "spark.sql.catalog.iceberg.uri"              = var.unity_catalog_uri
+        "spark.sql.catalog.iceberg.warehouse"        = "unity"
+        "spark.sql.catalog.iceberg.token"            = var.unity_catalog_token
+        "spark.sql.adaptive.enabled"                 = "true"
       }
     }
   ])

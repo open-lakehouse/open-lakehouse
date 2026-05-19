@@ -12,28 +12,30 @@ This setup uses **Airflow 3.1.6** with Python 3.12. See [Airflow 3.x Notes](#air
 ┌──────────────────────────────────────────────────────────────┐
 │                      Airflow (port 8085)                     │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
-│  │ API Server  │  │  Scheduler  │  │     Triggerer       │   │
+│  │ Web Server  │  │  Scheduler  │  │     Triggerer       │   │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘   │
 └──────────────────────────────────────────────────────────────┘
          │                   │                    │
-         │ docker exec       │ Kafka sensors      │ Airflow DB
-         │ spark-submit      │ (wait for data)    │ (task state)
+         │ Connect client    │ Kafka sensors      │ Airflow DB
+         │ sc://...:15002    │ (wait for data)    │ (task state)
          ▼                   ▼                    ▼
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│    Spark    │      │    Kafka    │      │  PostgreSQL │
-│  4.0 / 4.1  │      │   Broker    │      │ (Airflow's) │
-└─────────────┘      └─────────────┘      └─────────────┘
-         │
-         │ Spark talks to
-         │ Iceberg catalog
+┌──────────────────┐  ┌─────────────┐      ┌─────────────┐
+│  Spark Connect   │  │    Kafka    │      │  PostgreSQL │
+│  (spark-conn-41) │  │   Broker    │      │ (Airflow's) │
+│         │        │  └─────────────┘      └─────────────┘
+│         ▼        │
+│  Spark master/   │
+│  worker (4.1)    │
+└────────┬─────────┘
+         │ Iceberg REST
          ▼
-┌─────────────────────────────────────────┐
-│              Iceberg Tables             │
-│  bronze.* → silver.* → gold.*           │
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│         Unity Catalog OSS (:8081)        │
+│  iceberg.bronze.* → silver.* → gold.*    │
+└──────────────────────────────────────────┘
 ```
 
-**Key point**: Airflow orchestrates Spark jobs via `docker exec spark-submit`. Airflow does not talk directly to Iceberg - Spark handles all Iceberg operations.
+**Key point**: Airflow orchestrates Spark work via Spark Connect (`sc://localhost:15002`), not direct `spark-submit` calls. The Connect server holds the Iceberg catalog wiring (Unity Catalog REST), so Airflow tasks stay thin. For SDP pipelines, Airflow shells out to `spark-pipelines run` which uses Connect internally.
 
 ## Quick Start
 

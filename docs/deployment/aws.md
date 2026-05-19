@@ -15,25 +15,34 @@ This guide covers deploying the lakehouse stack on AWS using managed services. T
 ## AWS Architecture
 
 ```
-                    ┌─────────────────────────────────────┐
-                    │           Amazon VPC                │
-                    │                                     │
-┌───────────┐       │  ┌─────────────┐  ┌─────────────┐  │
-│  Client   │───────┼──│  EMR Cluster │  │  MSK Cluster │  │
-└───────────┘       │  │  (Spark 4.x) │  │  (Kafka)     │  │
-                    │  └──────┬──────┘  └──────┬──────┘  │
-                    │         │                │         │
-                    │         ▼                ▼         │
-                    │  ┌─────────────────────────────┐   │
-                    │  │      Amazon S3 (Data Lake)   │   │
-                    │  │  s3://your-bucket/warehouse  │   │
-                    │  └─────────────────────────────┘   │
-                    │                                     │
-                    │  ┌─────────────┐                   │
-                    │  │  RDS PostgreSQL │ (Iceberg Catalog)
-                    │  └─────────────┘                   │
-                    └─────────────────────────────────────┘
+                  ┌────────────────────────────────────────────┐
+                  │              Amazon VPC                    │
+                  │                                            │
+┌───────────┐     │  ┌────────────────┐   ┌──────────────┐    │
+│  Client   │─────┼──│  Spark on EMR  │   │ MSK Cluster  │    │
+│  sc://    │     │  │  + Connect svr │   │  (Kafka)     │    │
+│  :15002   │     │  │  (Spark 4.1)   │   └──────┬───────┘    │
+└───────────┘     │  └────────┬───────┘          │            │
+                  │           │ Iceberg REST     │            │
+                  │           ▼                  ▼            │
+                  │  ┌────────────────────────────────────┐   │
+                  │  │  Unity Catalog OSS (EC2 / Fargate) │   │
+                  │  │  /api/2.1/unity-catalog/iceberg    │   │
+                  │  └────────┬───────────────────────────┘   │
+                  │           │                               │
+                  │           ▼                               │
+                  │  ┌────────────────────────────────────┐   │
+                  │  │   Amazon S3 (warehouse + bronze/   │   │
+                  │  │   silver/gold prefixes)            │   │
+                  │  └────────────────────────────────────┘   │
+                  │                                            │
+                  │  ┌────────────────────────────────────┐   │
+                  │  │  RDS PostgreSQL (UC metastore)     │   │
+                  │  └────────────────────────────────────┘   │
+                  └────────────────────────────────────────────┘
 ```
+
+The client connects to the Spark Connect server (gRPC, port 15002) inside the VPC, typically via a load balancer or VPN. Unity Catalog OSS runs as a separate process and persists metadata in RDS PostgreSQL. Iceberg/Delta data files live in S3 — UC vends short-lived S3 credentials to clients (no hardcoded keys in jobs).
 
 ## Cost Estimates (US regions, on-demand)
 

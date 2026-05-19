@@ -85,3 +85,16 @@ variable "emr_core_instance_count" {
   type        = number
   default     = 2
 }
+
+# Unity Catalog OSS (the only Iceberg catalog mode for this repo)
+variable "unity_catalog_uri" {
+  description = "Unity Catalog OSS Iceberg REST endpoint, e.g. https://uc.example.com/api/2.1/unity-catalog/iceberg"
+  type        = string
+}
+
+variable "unity_catalog_token" {
+  description = "Bearer token for Unity Catalog (use 'not_used' for local/unauth deployments)"
+  type        = string
+  default     = "not_used"
+  sensitive   = true
+}

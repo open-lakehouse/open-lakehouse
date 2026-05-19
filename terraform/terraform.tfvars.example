@@ -23,6 +23,11 @@ emr_master_instance_type = "m5.xlarge"
 emr_core_instance_type   = "m5.xlarge"
 emr_core_instance_count  = 2
 
+# Unity Catalog OSS (the Iceberg catalog for this stack — no JDBC catalog path)
+# Point this at your deployed UC server's Iceberg REST endpoint.
+unity_catalog_uri   = "https://uc.example.com/api/2.1/unity-catalog/iceberg"
+unity_catalog_token = "not_used"   # set to a real OAuth token when auth is wired
+
 # Networking
 vpc_cidr           = "10.0.0.0/16"
 enable_nat_gateway = true

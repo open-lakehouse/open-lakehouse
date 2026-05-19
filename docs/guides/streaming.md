@@ -5,17 +5,21 @@ Run real-time streaming pipelines with Kafka and Spark Structured Streaming.
 ## Architecture
 
 ```
-┌──────────────┐      ┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   Producer   │ ──── │    Kafka    │ ──── │    Spark     │ ──── │   Iceberg   │
-│  (Python)    │      │   Broker    │      │  Streaming   │      │   Tables    │
-└──────────────┘      └─────────────┘      └──────────────┘      └─────────────┘
-                      (event queue)        (direct read)         (via catalog)
-                                                  │
-                                                  ▼
-                                           ┌─────────────┐
-                                           │ Checkpoints │
-                                           │(exactly-once)│
-                                           └─────────────┘
+┌──────────────┐    ┌─────────────┐    ┌────────────────┐    ┌─────────────────┐
+│   Producer   │───▶│    Kafka    │───▶│  Spark Connect │───▶│  Unity Catalog  │
+│   (Python)   │    │   Broker    │    │  client (sc://)│    │  Iceberg REST   │
+└──────────────┘    └─────────────┘    └────────┬───────┘    └────────┬────────┘
+                                                │                     │
+                                          readStream                  │ resolves to
+                                                │                     ▼
+                                                │            ┌──────────────────┐
+                                                │            │  iceberg.bronze. │
+                                                │            │  silver.gold.*   │
+                                                ▼            └────────┬─────────┘
+                                       ┌─────────────────┐            │
+                                       │  Checkpoints    │◀───────────┘
+                                       │  (exactly-once) │  Iceberg writes
+                                       └─────────────────┘
 ```
 
 **Key points:**

@@ -1,83 +1,110 @@
-# Credentials and Secrets
+# ─── Credentials & secrets ──────────────────────────────────────────────
+# Never commit live credentials. The `detect-secrets` pre-commit hook is a
+# second line of defense; this is the first.
 config/spark/spark-defaults.conf
 config/unity-catalog/server.properties
 .env
 .env.*
 !.env.example
+.envrc
 credentials.env
 **/credentials*.env
+secrets.yaml
+secrets.yml
+secrets.json
+**/secrets/
+**/.secrets/
+.secrets.baseline
+
+# Cryptographic material
 *.key
 *.pem
 *.p12
 *.pfx
 *.crt
 *.cer
-.secrets.baseline
-**/secrets/
-**/.secrets/
+*.jks
+*.keystore
+*.truststore
+*.kdbx
 
-# AWS credentials
+# Cloud provider credentials
 .aws/
 aws-credentials*
+.gcloud/
+gcloud-credentials*
+.azure/
 
-# JAR files (use scripts/tools/download-jars.sh)
+# ─── Build artifacts ────────────────────────────────────────────────────
+# JARs are downloaded by scripts/tools/download-jars.sh
 jars/*.jar
 jars/*.jar.[0-9]*
-
-# IDE
-.vscode/
-.idea/
-
-# vim swap files
-*.swo
-*.swp
+/*.jar
+node_modules/
 
 # Python
 __pycache__/
 *.pyc
+*.pyo
 .ipynb_checkpoints/
 .venv/
+.python-version
+*.egg-info/
 .coverage
 .coverage.*
+coverage.xml
+htmlcov/
 .pytest_cache/
 .ruff_cache/
-
-# Loose JAR files at root (should be in jars/)
-/*.jar
+.mypy_cache/
 
 # Spark
 spark-warehouse/
 metastore_db/
 derby.log
 ivy-cache/
+spark-events/
+work/
 
 # MLflow
 mlruns/
 mlartifacts/
 
-# OS
+# ─── Terraform ──────────────────────────────────────────────────────────
+# Real tfvars contain credentials — only `.example` is tracked.
+**/*.tfvars
+!**/*.tfvars.example
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.backup
+**/*.tfstate.d/
+**/.terraform.lock.hcl
+**/*.tfplan
+
+# ─── Editor / OS noise ──────────────────────────────────────────────────
+.vscode/
+.idea/
+.history/
+*.swo
+*.swp
+*~
+*.bak
 .DS_Store
 Thumbs.db
 
-# Logs
+# ─── Logs and tmp ───────────────────────────────────────────────────────
 *.log
 logs/
+tmp/
+.tmp/
+*.tmp
 
 # Airflow
 logs/airflow/
 dags/__pycache__/
 
-# Terraform
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.backup
-terraform/.terraform.lock.hcl
-terraform/terraform.tfvars
-terraform-databricks/.terraform/
-terraform-databricks/*.tfstate
-terraform-databricks/*.tfstate.backup
-terraform-databricks/.terraform.lock.hcl
-terraform-databricks/terraform.tfvars
+# Docker
+docker-compose.override.yml
 
-# Claude Code local-only settings (per-machine)
+# ─── Claude Code per-machine state ──────────────────────────────────────
 .claude/settings.local.json
