@@ -1,0 +1,109 @@
+# Lakehouse Stack - Databricks Terraform Variables
+# Copy this file to terraform.tfvars and update with your values
+
+# -----------------------------------------------------------------------------
+# Required: Databricks Connection
+# -----------------------------------------------------------------------------
+
+# Your Databricks workspace URL
+databricks_host = "https://your-workspace.cloud.databricks.com"
+
+# Personal access token (generate in User Settings > Developer > Access Tokens)
+# SECURITY: Use environment variable TF_VAR_databricks_token instead of hardcoding
+databricks_token = ""
+
+# -----------------------------------------------------------------------------
+# Required: Cloud Provider and Storage
+# -----------------------------------------------------------------------------
+
+# Cloud provider where Databricks is deployed
+cloud_provider = "aws"  # Options: aws, azure, gcp
+
+# AWS region (only if cloud_provider = "aws")
+aws_region = "us-west-2"
+
+# Storage location for your data lake
+# AWS:   s3://your-bucket/warehouse
+# Azure: abfss://container@storageaccount.dfs.core.windows.net/warehouse
+# GCP:   gs://your-bucket/warehouse
+storage_location = "s3://your-lakehouse-bucket/warehouse"
+
+# IAM role ARN for storage credential (AWS only)
+# This role needs s3:GetObject, s3:PutObject, s3:DeleteObject, s3:ListBucket
+aws_iam_role_arn = "arn:aws:iam::123456789012:role/databricks-storage-role"
+
+# Azure Access Connector ID (Azure only)
+# azure_access_connector_id = "/subscriptions/xxx/resourceGroups/xxx/providers/Microsoft.Databricks/accessConnectors/xxx"
+
+# -----------------------------------------------------------------------------
+# Project Settings
+# -----------------------------------------------------------------------------
+
+project_name = "lakehouse"
+environment  = "dev"  # Options: dev, staging, prod
+catalog_name = "lakehouse"
+timezone     = "UTC"
+
+# -----------------------------------------------------------------------------
+# Interactive Cluster (for development)
+# -----------------------------------------------------------------------------
+
+create_interactive_cluster = true
+
+# Node types vary by cloud:
+# AWS:   m5.xlarge, m5.2xlarge, r5.xlarge, etc.
+# Azure: Standard_DS3_v2, Standard_DS4_v2, etc.
+# GCP:   n1-standard-4, n1-standard-8, etc.
+interactive_cluster_node_type = "m5.xlarge"
+
+interactive_cluster_min_workers = 1
+interactive_cluster_max_workers = 4
+cluster_autotermination_minutes = 60  # Auto-stop after 1 hour idle
+
+# -----------------------------------------------------------------------------
+# SQL Warehouse (for analytics/BI tools)
+# -----------------------------------------------------------------------------
+
+create_sql_warehouse = true
+
+# Size options: 2X-Small, X-Small, Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large
+sql_warehouse_size = "Small"
+
+sql_warehouse_max_clusters    = 2
+sql_warehouse_auto_stop_mins  = 15  # Auto-stop after 15 min idle
+sql_warehouse_serverless      = true  # Use serverless (recommended)
+
+# -----------------------------------------------------------------------------
+# ETL Jobs (optional - creates scheduled medallion pipelines)
+# -----------------------------------------------------------------------------
+
+create_etl_jobs = false
+
+job_cluster_node_type   = "m5.xlarge"
+job_cluster_num_workers = 2
+
+# Cron schedules (Quartz format)
+bronze_etl_schedule = "0 0 * * * ?"   # Every hour at :00
+silver_etl_schedule = "0 30 * * * ?"  # Every hour at :30
+
+# -----------------------------------------------------------------------------
+# Permissions
+# -----------------------------------------------------------------------------
+
+# Databricks group names (create these groups in your workspace first)
+data_engineers_group = "data-engineers"
+analysts_group       = "analysts"
+
+# -----------------------------------------------------------------------------
+# Notifications
+# -----------------------------------------------------------------------------
+
+notification_emails = []  # ["team@example.com"]
+
+# -----------------------------------------------------------------------------
+# External Services (optional)
+# -----------------------------------------------------------------------------
+
+# Kafka credentials for streaming jobs (stored in Databricks secrets)
+# kafka_api_key    = ""
+# kafka_api_secret = ""

@@ -1,0 +1,116 @@
+[project]
+name = "open-lakehouse"
+version = "0.1.0"
+description = "Composable OSS lakehouse demo platform: Spark 4.1, Kafka, Airflow, Iceberg, Delta, Unity Catalog OSS, MLflow. AI-friendly setup/teardown, ready for AWS deployment."
+authors = [
+    {name = "open-lakehouse",email = "noreply@open-lakehouse.dev"}
+]
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pyspark (>=4.0.0,<5.0.0)",
+    "kafka-python (>=2.3.0,<3.0.0)",
+    "pyarrow (>=15.0.0,<19.0.0)",
+    "numpy (>=1.26.0,<3.0.0)",
+    "pandas (>=2.2.0,<3.0.0)",
+    "scipy (>=1.11.0,<2.0.0)",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-timeout>=2.2.0",
+    "testcontainers>=3.7.0",
+    "psycopg2-binary>=2.9.9",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+black = ">=26.3.1,<27.0.0"  # >= 26.3.1 for GHSA-3936-cmfr-pm3m
+ruff = ">=0.9.0,<1.0.0"
+pytest = ">=8.0.0,<10.0.0"
+pytest-cov = ">=5.0.0"
+pytest-timeout = ">=2.2.0,<3.0.0"
+pre-commit = ">=4.0.0,<5.0.0"
+
+[tool.poetry.group.test.dependencies]
+testcontainers = ">=3.7.0,<5.0.0"
+psycopg2-binary = ">=2.9.9,<3.0.0"
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '/.pyi?$'
+extend-exclude = '''
+/(
+  \.venv
+  | jars
+  | notebooks
+)/
+'''
+
+[tool.ruff]
+line-length = 88
+select = ['E', 'F', 'I']
+ignore = ["E501"]
+exclude = [".venv", "jars", "notebooks"]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.coverage.run]
+branch = true
+source = ["scripts/testdata"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/.venv/*",
+    # Demo and connectivity scripts (run manually, not library code)
+    "demos/*",
+    "scripts/connectivity/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+show_missing = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: mark test as integration test (may require Docker)",
+    "slow: mark test as slow-running",
+    "security: mark test as security-focused",
+    "full_stack: marks tests requiring all services running",
+    "sdp: mark test as SDP data source test",
+    "file_formats: mark test for file format sources",
+    "table_formats: mark test for table format sources",
+    "streaming: mark test for streaming sources",
+]
+addopts = [
+    "-v",
+    "--tb=short",
+    "-ra",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "notebooks", ".venv"]
+skips = ["B101"]  # Skip assert warnings in non-test code

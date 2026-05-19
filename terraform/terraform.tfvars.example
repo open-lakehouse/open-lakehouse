@@ -1,0 +1,28 @@
+# Lakehouse Terraform Variables
+# Copy this file to terraform.tfvars and customize
+
+aws_region     = "us-west-2"
+project_name   = "lakehouse"
+environment    = "dev"
+
+# S3 bucket name (must be globally unique)
+s3_bucket_name = "my-lakehouse-data-CHANGEME"
+
+# Database credentials
+db_username = "lakehouse"
+db_password = "CHANGEME-use-a-secure-password"
+
+# RDS instance size
+# dev: db.t3.micro (~$15/month)
+# prod: db.t3.medium (~$50/month)
+rds_instance_class = "db.t3.micro"
+
+# EMR Cluster (optional - adds ~$200/month)
+create_emr_cluster       = false
+emr_master_instance_type = "m5.xlarge"
+emr_core_instance_type   = "m5.xlarge"
+emr_core_instance_count  = 2
+
+# Networking
+vpc_cidr           = "10.0.0.0/16"
+enable_nat_gateway = true

@@ -1,0 +1,40 @@
+open-lakehouse
+Copyright 2026 open-lakehouse contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product runs and integrates with the following third-party open source
+components. The components themselves are NOT redistributed in this repository
+as source code — they are pulled at runtime as container images or as Maven
+artifacts. Their respective licenses apply to their own source.
+
+Apache 2.0 components
+---------------------
+- Apache Spark              https://github.com/apache/spark              Apache-2.0
+- Apache Iceberg            https://github.com/apache/iceberg            Apache-2.0
+- Apache Kafka              https://github.com/apache/kafka              Apache-2.0
+- Apache Airflow            https://github.com/apache/airflow            Apache-2.0
+- Apache Hadoop             https://github.com/apache/hadoop             Apache-2.0
+- Apache ZooKeeper          https://github.com/apache/zookeeper          Apache-2.0
+- Delta Lake                https://github.com/delta-io/delta            Apache-2.0
+- Unity Catalog OSS         https://github.com/unitycatalog/unitycatalog Apache-2.0
+- MLflow                    https://github.com/mlflow/mlflow             Apache-2.0
+- SeaweedFS                 https://github.com/seaweedfs/seaweedfs       Apache-2.0
+- AWS SDK for Java v2       https://github.com/aws/aws-sdk-java-v2       Apache-2.0
+- Prometheus                https://github.com/prometheus/prometheus     Apache-2.0
+- Apache projects (any others reachable via the above)                    Apache-2.0
+
+Permissive components compatible with Apache 2.0
+------------------------------------------------
+- JupyterLab                https://github.com/jupyterlab/jupyterlab     BSD-3-Clause
+- PostgreSQL JDBC Driver    https://github.com/pgjdbc/pgjdbc             BSD-2-Clause
+- PostgreSQL                https://www.postgresql.org/                  PostgreSQL License
+
+This NOTICE file is provided in accordance with the Apache License 2.0,
+Section 4(d). Modifications to this file should preserve all attribution
+notices listed above.
+
+Verification
+------------
+License SPDX identifiers in this NOTICE were cross-checked via the GitHub API
+against each upstream project's published LICENSE on 2026-05-19.

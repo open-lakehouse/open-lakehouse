@@ -1,0 +1,9 @@
+name: lakehouse_pipeline
+libraries:
+  - glob:
+      include: pipeline_sdp.py
+catalog: iceberg
+database: bronze
+storage: /tmp/lakehouse-checkpoint
+configuration:
+  spark.sql.shuffle.partitions: "200"

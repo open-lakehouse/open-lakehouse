@@ -1,0 +1,58 @@
+# Spark 4.1 configuration for open-lakehouse.
+# Catalog: Unity Catalog OSS via Iceberg REST endpoint.
+#
+# Benefits:
+# - Multi-format (Delta + Iceberg + Hudi via UniForm)
+# - Credential vending (no hardcoded S3 keys in Spark)
+# - Multi-engine interop (DuckDB, Trino, Dremio, etc.)
+#
+# Copy to spark-defaults.conf and fill in your S3 credentials.
+
+# ============================================================================
+# Iceberg + Unity Catalog REST Configuration
+# ============================================================================
+spark.sql.extensions                      org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+
+# Primary catalog via Unity Catalog REST endpoint
+spark.sql.catalog.iceberg                 org.apache.iceberg.spark.SparkCatalog
+spark.sql.catalog.iceberg.catalog-impl    org.apache.iceberg.rest.RESTCatalog
+spark.sql.catalog.iceberg.uri             http://localhost:8081/api/2.1/unity-catalog/iceberg
+spark.sql.catalog.iceberg.warehouse       unity
+spark.sql.catalog.iceberg.token           not_used
+
+# Set default catalog (optional)
+# spark.sql.defaultCatalog                iceberg
+
+# ============================================================================
+# S3/SeaweedFS Configuration
+# ============================================================================
+# Note: With Unity Catalog credential vending, these may be optional
+# depending on your UC server configuration. Keep them for direct S3 access.
+
+spark.hadoop.fs.s3a.endpoint              http://localhost:8333
+spark.hadoop.fs.s3a.access.key            your_access_key
+spark.hadoop.fs.s3a.secret.key            your_secret_key
+spark.hadoop.fs.s3a.path.style.access     true
+spark.hadoop.fs.s3a.impl                  org.apache.hadoop.fs.s3a.S3AFileSystem
+spark.hadoop.fs.s3a.connection.ssl.enabled false
+
+# ============================================================================
+# Required JARs
+# ============================================================================
+# Iceberg REST catalog requires the iceberg-spark-runtime JAR
+spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar
+
+# ============================================================================
+# Performance Tuning
+# ============================================================================
+spark.driver.memory                       4g
+spark.executor.memory                     8g
+spark.executor.cores                      2
+spark.sql.warehouse.dir                   /opt/spark-data/warehouse
+
+# ============================================================================
+# Event Logging
+# ============================================================================
+spark.eventLog.enabled                    true
+spark.eventLog.dir                        /opt/spark-data/logs
+spark.history.fs.logDirectory             /opt/spark-data/logs

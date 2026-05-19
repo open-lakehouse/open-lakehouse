@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(./lakehouse:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker exec spark-master-41:*)",
+      "Bash(docker exec kafka:*)",
+      "Bash(docker exec unity-catalog:*)",
+      "Bash(docker exec mlflow:*)",
+      "Bash(curl -s http://localhost:8081/*)",
+      "Bash(curl -s http://localhost:5000/*)",
+      "Bash(curl -s http://localhost:5001/*)",
+      "Bash(curl -s http://localhost:8085/*)",
+      "Bash(jq:*)",
+      "Bash(poetry run pytest:*)",
+      "Bash(poetry run black:*)",
+      "Bash(poetry run ruff:*)",
+      "Bash(pre-commit run:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)"
+    ],
+    "ask": [
+      "Bash(docker compose down*)",
+      "Bash(rm:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(docker system prune:*)",
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)"
+    ]
+  }
+}

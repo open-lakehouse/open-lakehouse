@@ -1,0 +1,83 @@
+# Credentials and Secrets
+config/spark/spark-defaults.conf
+config/unity-catalog/server.properties
+.env
+.env.*
+!.env.example
+credentials.env
+**/credentials*.env
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+.secrets.baseline
+**/secrets/
+**/.secrets/
+
+# AWS credentials
+.aws/
+aws-credentials*
+
+# JAR files (use scripts/tools/download-jars.sh)
+jars/*.jar
+jars/*.jar.[0-9]*
+
+# IDE
+.vscode/
+.idea/
+
+# vim swap files
+*.swo
+*.swp
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+
+# Loose JAR files at root (should be in jars/)
+/*.jar
+
+# Spark
+spark-warehouse/
+metastore_db/
+derby.log
+ivy-cache/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Airflow
+logs/airflow/
+dags/__pycache__/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+terraform-databricks/.terraform/
+terraform-databricks/*.tfstate
+terraform-databricks/*.tfstate.backup
+terraform-databricks/.terraform.lock.hcl
+terraform-databricks/terraform.tfvars
+
+# Claude Code local-only settings (per-machine)
+.claude/settings.local.json
