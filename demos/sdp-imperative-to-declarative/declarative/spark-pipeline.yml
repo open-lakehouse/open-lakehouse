@@ -1,0 +1,8 @@
+name: declarative-medallion
+# No catalog/schema set — datasets resolve to spark_catalog.default (Delta).
+# SDP does not create catalogs or schemas, so a pipeline-declared schema must
+# already exist; `default` always does. Tables are flat-named (dec_orders_*).
+storage: file:///tmp/declarative-medallion-storage
+libraries:
+  - glob:
+      include: transformations/**

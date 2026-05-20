@@ -23,11 +23,14 @@ Every `demos/<name>/README.md` has these five sections, in order:
 | Demo | Status | Transport | What it shows |
 |------|--------|-----------|---------------|
 | [`sdp-medallion/`](sdp-medallion/) | **Built** | `spark-pipelines` | Bronze → Silver → Gold via Spark Declarative Pipelines, materialized as Delta tables in Unity Catalog OSS. |
+| [`sdp-imperative-to-declarative/`](sdp-imperative-to-declarative/) | **Built** | Connect + `spark-pipelines` | The same medallion pipeline written twice — imperative PySpark vs SDP — to show what SDP removes. |
+| [`sdp-streaming-batch-sql/`](sdp-streaming-batch-sql/) | **Built** | `spark-pipelines` | `CREATE STREAMING TABLE` vs `CREATE MATERIALIZED VIEW` — streaming vs batch semantics, in SQL. |
+| [`sdp-cli-lifecycle/`](sdp-cli-lifecycle/) | **Built** | `spark-pipelines` | The `spark-pipelines` developer loop as shell commands — `init`, `dry-run`, `run`. |
 | [`unity-catalog-multi-engine/`](unity-catalog-multi-engine/) | Placeholder | Spark Connect + DuckDB | One catalog, multiple engines reading the same table. |
 | [`realtime-mode/`](realtime-mode/) | Placeholder | Spark Connect (Structured Streaming) | Kafka → Delta streaming with watermarked dedup over Connect. |
 | [`local-mode-spark/`](local-mode-spark/) | **Not yet implemented** | Local (no cluster) | In-process SparkSession for offline / laptop-only demos. Backs the `--spark-local` flag. |
 
-`sdp-medallion` is a working demo with a full README. The other three are
+The four SDP demos are working demos with full READMEs. The other three are
 placeholders — content is added demo-by-demo, never fabricated. To scaffold:
 
 ```bash
