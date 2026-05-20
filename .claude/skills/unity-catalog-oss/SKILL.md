@@ -90,9 +90,38 @@ Trino, Dremio: same pattern — register UC's `/iceberg/v1/` URL as an Iceberg R
 ## Limitations of UC OSS 0.4.x (don't promise users these)
 
 - Auth providers (OAuth, SAML) are partial.
-- The Delta-native API surface (`/delta/*`) is read-mostly. For full Delta DML, use Spark directly against the Delta table path.
 - Lineage events (system tables) are minimal compared to managed Databricks UC.
 - Cross-catalog references work; cross-deployment federation does not.
+
+## Write-side reality (verified 2026-05-19, v0.4.0 and v0.4.1)
+
+UC OSS's write story is partial and format-specific. What was actually tested:
+
+- **Iceberg is read-only.** UC's Iceberg REST adapter (`/iceberg/v1/...`)
+  advertises only `GET`/`HEAD` endpoints — no `POST` for namespace or table
+  creation. Spark `CREATE TABLE` against the `iceberg` catalog fails with
+  `UnsupportedOperationException: Server does not support endpoint`. UC's
+  native `/tables` API rejects `ICEBERG` as a `data_source_format` entirely
+  (accepts `DELTA`, `PARQUET`, `CSV`, `JSON`). **Treat the `iceberg` catalog
+  as read-only** — fine for cross-engine reads of tables created elsewhere,
+  not for writes.
+- **Delta writes work** via the UC Spark connector (`io.unitycatalog.spark.UCSingleCatalog`),
+  with sharp edges:
+  - The connector asserts `location != null` and `provider != null` in
+    `createTable`. The standard Spark SQL path populates `location`
+    automatically; SDP and other non-analyzer paths don't — you must pass
+    `location` + `provider` explicitly (in `table_properties` for SDP). See
+    [[sdp]] → `unity-catalog.md`.
+  - Credential vending (`generateTemporaryPathCredentials`) only accepts
+    `s3` / `gs` / `abfs` URI schemes — **`s3a://` is rejected.** Write
+    locations as `s3://`; Hadoop resolves via the `spark.hadoop.fs.s3.impl`
+    → `S3AFileSystem` mapping.
+  - No truncate support — re-creating an existing table errors. Drop first.
+- **Bucket config gotcha:** UC's `ServerProperties.getS3Configurations()` loop
+  breaks (silently skipping the bucket) if *either* the IAM-role group OR the
+  static-creds group has any null field. For SeaweedFS / static-cred mode set
+  a non-null `s3.sessionToken.0` (any placeholder) or the bucket won't load
+  and credential vending fails with "S3 bucket configuration not found."
 
 ## When something's wrong
 

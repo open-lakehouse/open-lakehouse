@@ -5,9 +5,9 @@ description: Spark Declarative Pipelines (SDP) — the declarative pipeline fram
 
 # Spark Declarative Pipelines
 
-SDP is Spark's declarative pipeline framework: write Python functions decorated with `@dlt.table` / `@dlt.view`, declare expectations, and Spark runs them as a managed pipeline with topological scheduling, schema enforcement, and quality checks. SDP replaces hand-rolled `read → transform → writeTo` chains.
+SDP is Spark's declarative pipeline framework: write Python functions decorated with `@dp.materialized_view` (`from pyspark import pipelines as dp`) or SQL files with `CREATE MATERIALIZED VIEW`, and Spark runs them as a managed pipeline with topological scheduling, schema enforcement, and quality checks. SDP replaces hand-rolled `read → transform → writeTo` chains. The CLI is `spark-pipelines` (subcommands: `init`, `dry-run`, `run`).
 
-**SDP requires Spark Connect.** `pyspark.pipelines` uses `SparkConnectGraphElementRegistry` internally for the dataflow graph, even though `spark-pipelines run` doesn't open `sc://` explicitly. In this stack the Connect server in `spark-connect-41` provides that machinery — if you see `NoClassDefFoundError` related to Connect when running a pipeline, check `./lakehouse status --json | jq .spark.connect_grpc_listening`.
+**SDP requires Spark Connect.** `pyspark.pipelines` uses `SparkConnectGraphElementRegistry` internally for the dataflow graph, and `spark-pipelines` spawns its own embedded Connect server (the `SparkConnectPlugin` driver plugin) — note this collides on port 15002 with the standalone `spark-connect-41` server, so stop one while running the other.
 
 Authoritative reference. The user-facing `docs/guides/pipelines.md` points here.
 
@@ -18,7 +18,13 @@ Authoritative reference. The user-facing `docs/guides/pipelines.md` points here.
 | Patterns (medallion bronze/silver/gold, type-2 SCD, CDC) | [patterns.md](patterns.md) |
 | Streaming pipelines (Kafka → Iceberg) | [streaming.md](streaming.md) |
 | Data sources (file, JDBC, REST, custom) | [data-sources.md](data-sources.md) |
+| **Targeting Unity Catalog OSS** (the `table_properties` location+provider pattern) | [unity-catalog.md](unity-catalog.md) |
 | Errors & how to read SDP logs | [troubleshooting.md](troubleshooting.md) |
+
+> **Catalog note:** SDP-on-UC works for **Delta tables only**, and requires an
+> explicit `location` + `provider` in `table_properties`. This is non-obvious
+> and verified — read [unity-catalog.md](unity-catalog.md) before targeting
+> `catalog: unity` in a pipeline spec.
 
 ## Critical naming rules
 

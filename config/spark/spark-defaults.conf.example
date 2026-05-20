@@ -1,39 +1,44 @@
 # Spark 4.1 configuration for open-lakehouse.
-# Catalog: Unity Catalog OSS via Iceberg REST endpoint.
 #
-# Benefits:
-# - Multi-format (Delta + Iceberg + Hudi via UniForm)
-# - Credential vending (no hardcoded S3 keys in Spark)
-# - Multi-engine interop (DuckDB, Trino, Dremio, etc.)
+# Catalogs:
+#   unity   — Unity Catalog OSS, Delta tables. PRIMARY write path.
+#   iceberg — Unity Catalog OSS Iceberg REST endpoint. READ-ONLY (UC OSS 0.4.x
+#             exposes no Iceberg write endpoints).
 #
 # Copy to spark-defaults.conf and fill in your S3 credentials.
 
 # ============================================================================
-# Iceberg + Delta extensions (both enabled by default)
+# Iceberg + Delta extensions
 # ============================================================================
 # Order matters: Iceberg first, Delta second.
 spark.sql.extensions                      org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,io.delta.sql.DeltaSparkSessionExtension
 
-# Iceberg via Unity Catalog REST endpoint (named catalog: `iceberg`)
+# ----------------------------------------------------------------------------
+# unity — Unity Catalog OSS, Delta tables (PRIMARY write path)
+# Tables: unity.<schema>.<table>. Requires the UC Spark connector JARs below.
+# ----------------------------------------------------------------------------
+spark.sql.catalog.unity                   io.unitycatalog.spark.UCSingleCatalog
+spark.sql.catalog.unity.uri               http://localhost:8081
+spark.sql.catalog.unity.token             not_used
+
+# Default Spark catalog as DeltaCatalog — Delta extension functions
+# (CREATE/INSERT/MERGE) need this even when operating on unity.* tables.
+spark.sql.catalog.spark_catalog           org.apache.spark.sql.delta.catalog.DeltaCatalog
+
+# ----------------------------------------------------------------------------
+# iceberg — UC OSS Iceberg REST endpoint, READ-ONLY
+# UC OSS 0.4.x exposes only GET endpoints for Iceberg; no table/namespace
+# creation. Use for cross-engine reads of Iceberg tables created elsewhere.
+# ----------------------------------------------------------------------------
 spark.sql.catalog.iceberg                 org.apache.iceberg.spark.SparkCatalog
 spark.sql.catalog.iceberg.catalog-impl    org.apache.iceberg.rest.RESTCatalog
 spark.sql.catalog.iceberg.uri             http://localhost:8081/api/2.1/unity-catalog/iceberg
 spark.sql.catalog.iceberg.warehouse       unity
 spark.sql.catalog.iceberg.token           not_used
 
-# Delta on the default Spark catalog (named catalog: `spark_catalog`)
-# Delta tables are addressed via spark_catalog.<schema>.<table> or path-based.
-spark.sql.catalog.spark_catalog           org.apache.spark.sql.delta.catalog.DeltaCatalog
-
-# Set default catalog (optional — Iceberg is the medallion path for this stack)
-# spark.sql.defaultCatalog                iceberg
-
 # ============================================================================
-# S3/SeaweedFS Configuration
+# S3 / SeaweedFS
 # ============================================================================
-# Note: With Unity Catalog credential vending, these may be optional
-# depending on your UC server configuration. Keep them for direct S3 access.
-
 spark.hadoop.fs.s3a.endpoint              http://localhost:8333
 spark.hadoop.fs.s3a.access.key            your_access_key
 spark.hadoop.fs.s3a.secret.key            your_secret_key
@@ -41,12 +46,17 @@ spark.hadoop.fs.s3a.path.style.access     true
 spark.hadoop.fs.s3a.impl                  org.apache.hadoop.fs.s3a.S3AFileSystem
 spark.hadoop.fs.s3a.connection.ssl.enabled false
 
+# UC stores table LOCATIONs as s3:// (no 'a'). Map that scheme to S3AFileSystem
+# so Hadoop can read/write SeaweedFS regardless of how the URI is written.
+spark.hadoop.fs.s3.impl                   org.apache.hadoop.fs.s3a.S3AFileSystem
+spark.hadoop.fs.AbstractFileSystem.s3.impl org.apache.hadoop.fs.s3a.S3A
+
 # ============================================================================
 # Required JARs
 # ============================================================================
-# Iceberg + Delta runtimes + Hadoop/AWS S3 connector. All downloaded by
-# `./lakehouse setup` (scripts/tools/download-jars.sh) into ./jars/.
-spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/delta-spark_2.13-4.0.1.jar,/opt/spark/jars-extra/delta-storage-4.0.1.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar
+# All downloaded by `./lakehouse setup` (scripts/tools/download-jars.sh).
+# Delta is 4.2.0 — required for Spark 4.1 ABI compatibility.
+spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/delta-spark_2.13-4.2.0.jar,/opt/spark/jars-extra/delta-storage-4.2.0.jar,/opt/spark/jars-extra/unitycatalog-spark_2.13-0.3.0.jar,/opt/spark/jars-extra/unitycatalog-client-0.3.0.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar
 
 # ============================================================================
 # Performance Tuning
@@ -54,7 +64,8 @@ spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt
 spark.driver.memory                       4g
 spark.executor.memory                     8g
 spark.executor.cores                      2
-spark.sql.warehouse.dir                   /opt/spark-data/warehouse
+# Warehouse dir for SDP-managed tables. s3:// (not s3a://) so UC accepts it.
+spark.sql.warehouse.dir                   s3://lakehouse/warehouse/sdp
 
 # ============================================================================
 # Event Logging
