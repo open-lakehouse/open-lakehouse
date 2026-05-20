@@ -1,9 +1,12 @@
-name: lakehouse_pipeline
+name: ghost-kitchen-medallion
+catalog: unity
+schema: medallion
+storage: file:///tmp/ghost-kitchen-medallion-storage
 libraries:
   - glob:
       include: pipeline_sdp.py
-catalog: iceberg
-database: bronze
-storage: /tmp/lakehouse-checkpoint
 configuration:
-  spark.sql.shuffle.partitions: "200"
+  spark.sql.shuffle.partitions: "8"
+# Catalog / Delta / S3 wiring is inherited from the cluster's
+# spark-defaults.conf — those are static configs and can't be re-set here.
+# See .claude/skills/sdp/unity-catalog.md.

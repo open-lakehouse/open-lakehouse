@@ -1,39 +1,41 @@
 # Pipelines
 
-The pipeline framework for open-lakehouse is **Spark Declarative Pipelines (SDP)**. The authoritative reference — including patterns, streaming, data sources, and troubleshooting — lives at:
+The pipeline framework for open-lakehouse is **Spark Declarative Pipelines (SDP)** — OSS Apache Spark 4.1's `pyspark.pipelines`, not Databricks DLT.
+
+The authoritative reference — API, patterns, streaming, data sources, UC integration, troubleshooting — lives at:
 
 **[`.claude/skills/sdp/`](../../.claude/skills/sdp/)**
 
-That directory is human-readable. Start with `SKILL.md` (overview, naming rules, CLI), then read the sub-file that matches your task:
+That directory is human-readable. Start with `SKILL.md`, then the sub-file that matches your task:
 
 | Topic | File |
 |-------|------|
-| Bronze → Silver → Gold patterns, SCD, idempotence | `patterns.md` |
-| Streaming (Kafka → Iceberg) | `streaming.md` |
-| External data sources (files, JDBC, REST) | `data-sources.md` |
-| Errors and how to read SDP logs | `troubleshooting.md` |
+| OSS API, primitives, CLI, critical rules | `SKILL.md` |
+| Medallion, dedup, quarantine, CDC patterns | `patterns.md` |
+| Streaming (Kafka → streaming table) | `streaming.md` |
+| External data sources (files, JDBC, existing tables) | `data-sources.md` |
+| Targeting Unity Catalog OSS | `unity-catalog.md` |
+| Errors and how to read SDP output | `troubleshooting.md` |
+
+The canonical OSS SDP reference repo — pattern library + runnable examples — is [`lisancao/pyspark-sdp`](https://github.com/lisancao/pyspark-sdp). The open-lakehouse SDP skill is kept aligned with it.
 
 ## Why is this not duplicated here?
 
-Earlier versions of this stack maintained an SDP guide in `docs/` and a deeper SDP skill in `.claude/skills/`. They drifted out of sync. open-lakehouse keeps one canonical source under `.claude/skills/sdp/`. AI agents discover it via skill metadata; humans can read the markdown files directly.
-
-If you need the legacy "imperative vs declarative" framing, that's covered in `SKILL.md` under "When NOT to use SDP."
+Earlier versions kept an SDP guide in `docs/` *and* a skill in `.claude/skills/` and they drifted. One canonical source under `.claude/skills/sdp/` — AI agents discover it via skill metadata, humans read the markdown directly.
 
 ## Quick start
 
 ```bash
-# Reference pipeline
-cat scripts/pipelines/pipeline_sdp.py
+# spark-pipelines is the CLI. Scaffold a project:
+docker exec spark-master-41 /opt/spark/bin/spark-pipelines init my-pipeline
 
-# Dry-run validates the DAG without writing
-docker exec spark-master-41 /opt/spark/bin/spark-submit \
-  --packages io.delta:delta-spark_2.13:4.0.1 \
-  /opt/spark/sdp.py --pipeline /scripts/pipelines/spark-pipeline.yml --dry-run
+# Validate the DAG without writing:
+docker exec spark-master-41 sh -c 'cd my-pipeline && spark-pipelines dry-run'
 
-# Full run
-docker exec spark-master-41 /opt/spark/bin/spark-submit \
-  --packages io.delta:delta-spark_2.13:4.0.1 \
-  /opt/spark/sdp.py --pipeline /scripts/pipelines/spark-pipeline.yml
+# Run it:
+docker exec spark-master-41 sh -c 'cd my-pipeline && spark-pipelines run'
 ```
 
-For new pipelines, start from the `demos/sdp-medallion/` placeholder and follow the demo contract.
+`demos/sdp-medallion/` is a working bronze→silver→gold pipeline materialized
+into Unity Catalog — copy it as a starting point. Note the SDP↔UC sharp edges
+documented in [`.claude/skills/sdp/unity-catalog.md`](../../.claude/skills/sdp/unity-catalog.md).

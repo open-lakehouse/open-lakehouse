@@ -131,7 +131,7 @@ Without them you get `ModuleNotFoundError` from `pyspark/pipelines/cli.py`.
 | `AnalysisException: CANNOT_MODIFY_STATIC_CONFIG` | `configuration:` block in the spec re-sets a static config (`spark.sql.extensions`, `spark.sql.warehouse.dir`, `spark.connect.grpc.binding.port`) | Set those in `spark-defaults.conf` only; keep the spec's `configuration:` block minimal |
 | `PIPELINE_SPEC_UNEXPECTED_FIELD: target` | spec used `target:` | The field is `schema:` (or `database:`) |
 | `ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION` | `spark.createDataFrame([...])` inside a `@dp.materialized_view` function | Build lazily — `spark.range(n).selectExpr(...)` or read a source |
-| `Table does not support truncates` | re-running the pipeline over an existing UC table | Drop the UC table first, or materialize to a fresh path |
+| `Table does not support truncates` | re-running the pipeline over existing UC tables — SDP's MV refresh truncates, UC's connector has no truncate support. `--full-refresh-all` does NOT help (it also truncates). | Drop the tables first (`curl -X DELETE .../tables/unity.<schema>.<name>`), then run. See troubleshooting.md. |
 | schema-mismatch on re-run | Delta files on S3 hold the old schema | Drop the table AND clear its S3 prefix, or use a new `location` |
 | bare `AssertionError: assertion failed` | missing `location` or `provider` in `table_properties` | Supply both |
 | `Unsupported URI scheme: s3a` | `location` written as `s3a://` | Use `s3://` |

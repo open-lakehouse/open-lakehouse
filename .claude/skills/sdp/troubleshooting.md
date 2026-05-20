@@ -1,66 +1,100 @@
 # SDP troubleshooting
 
-## Reading SDP logs
+## Running and reading output
 
 ```bash
-docker logs spark-master-41 --tail 200 | grep -E "dlt|pipeline|expectation"
+# from the pipeline project dir inside the Spark container
+docker exec spark-master-41 sh -c \
+  'cd /tmp/<pipeline> && spark-pipelines run'
 ```
 
-Pipeline events are logged as JSON. The `event_type` field is the discriminator:
+Progress prints as `Flow <catalog>.<schema>.<name> is QUEUED / PLANNING /
+STARTING / RUNNING / has COMPLETED`, ending with `Run is COMPLETED`. A failure
+prints a Python traceback ending in a `pyspark.errors.exceptions.connect.*`
+exception — the useful line is the last one.
 
-| event_type | Meaning |
-|------------|---------|
-| `flow_definition` | Dataset registered |
-| `flow_progress` | A flow is running (records read/written) |
-| `flow_completed` | A flow finished successfully |
-| `expectation_progress` | Per-expectation row counts |
-| `flow_failure` | A flow failed — `details.message` has the cause |
+## Errors seen on this stack (verified)
 
-For streaming runs, the metrics flush every micro-batch.
+### `PIPELINE_SPEC_UNEXPECTED_FIELD: target`
+The spec field is `schema:` (or `database:`), not `target:`. Allowed spec
+fields: `name`, `storage`, `catalog`, `database`/`schema`, `configuration`,
+`libraries`.
 
-## Common errors
+### `ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION`
+A pipeline function triggered DataFrame analysis — `spark.createDataFrame([...])`,
+`.collect()`, `.count()`, `.show()`. Pipeline functions must return a lazy
+DataFrame. Build synthetic data with `spark.range(n).selectExpr(...)` instead.
 
-### `pyspark.errors.exceptions.captured.AnalysisException: Dataset 'silver_orders' is not defined`
+### `CANNOT_MODIFY_STATIC_CONFIG`
+The spec's `configuration:` block tried to set a static Spark config
+(`spark.sql.extensions`, `spark.sql.warehouse.dir`,
+`spark.connect.grpc.binding.port`). Those are fixed at JVM startup — set them
+in `spark-defaults.conf`, keep the spec's `configuration:` block minimal.
 
-You used `dlt.read("silver_orders")` but `silver_orders` is not decorated as `@dlt.table` or `@dlt.view`, OR it's in a different pipeline file not included via `libraries:`.
+### bare `java.lang.AssertionError: assertion failed`
+Targeting `catalog: unity` without `table_properties={"location": ...,
+"provider": "delta"}`. UC's connector asserts on both. See
+[unity-catalog.md](unity-catalog.md).
 
-Fix: confirm the function is decorated and the file is listed in `pipeline.yml` under `libraries`.
+### `Table does not support truncates`
+Re-running an SDP pipeline over **existing** UC tables. A `@dp.materialized_view`
+is recomputed each run; SDP's refresh path issues `TRUNCATE TABLE` to clear the
+table first, and UC OSS's Spark connector (`UCSingleCatalog`) does not implement
+the truncate capability (`SupportsTruncate`). New MVs go through `CREATE` (works);
+existing ones go through refresh → `TRUNCATE` (fails).
 
-### `Cycle detected in pipeline DAG`
+**Verified workaround (2026-05-20):** drop the tables, then run.
 
-You have `A → B → A`. SDP's DAG must be acyclic. Find the cycle by running with `--dry-run` and reading the printed dependency graph.
-
-### `Schema mismatch: existing table has columns [...], new write has columns [...]`
-
-The target table has a fixed schema; you're trying to write a different one. Either:
-1. Add `@dlt.table(table_properties={"pipelines.autoMerge.enabled": "true"})` (Iceberg/Delta both support schema evolution).
-2. Do an explicit `ALTER TABLE` outside the pipeline and re-run.
-
-### Expectation failures dropping all rows
-
-Symptom: silver table is empty after run.
-
-Check `expectation_progress` events:
 ```bash
-docker logs spark-master-41 | jq -r 'select(.event_type=="expectation_progress")'
+for t in <table1> <table2> ...; do
+  curl -s -X DELETE "http://localhost:8081/api/2.1/unity-catalog/tables/unity.<schema>.${t}"
+done
+spark-pipelines run
 ```
 
-You'll see which expectation dropped how many rows. Usually a too-strict `expect_or_drop` predicate.
+`--full-refresh-all` does **not** help — SDP's full-refresh path also truncates;
+tested, same error. The demo ships `demos/sdp-medallion/teardown.sh` which does
+exactly the drop loop — run teardown, then re-run the pipeline.
 
-### Iceberg writes fail with `NoSuchNamespaceException: silver`
+Root cause is the UC connector, not SDP or the UC server. A real fix is
+upstream: the connector implementing `SupportsTruncate`, or SDP's MV refresh
+using overwrite semantics instead of truncate.
 
-The catalog doesn't have the schema yet. Create it once:
+### `BindException: ... 15002`
+`spark-pipelines` embeds its own Connect server on 15002 — the standalone
+`spark-connect-41` container holds that port. Stop one:
+`docker stop spark-connect-41` before an SDP run, restart it after.
 
-```sql
-CREATE NAMESPACE IF NOT EXISTS iceberg.silver;
-```
+### `ModuleNotFoundError` from `pyspark/pipelines/cli.py`
+The Spark image lacks `spark-pipelines`' Python deps. Install
+`pyyaml pandas pyarrow grpcio grpcio-status protobuf zstandard` — see
+[unity-catalog.md](unity-catalog.md) "Pre-reqs the base Spark image is missing".
 
-SDP creates tables, not namespaces.
+### `Dataset '<name>' is not defined`
+A `spark.read.table("<name>")` references a dataset that isn't decorated, or
+lives in a file not matched by the spec's `libraries: glob`. Confirm the
+function is decorated and the file is under `transformations/`.
 
-### Streaming pipeline starts then immediately stops with no error
+### Cycle in the DAG
+`A` reads `B` and `B` reads `A`. The pipeline graph must be acyclic.
+`spark-pipelines dry-run` validates the graph without executing.
 
-Usually `startingOffsets: "latest"` against an empty topic. Either seed the topic with one event, or switch to `earliest` for the first run.
+### Streaming pipeline starts then stops with no error
+`startingOffsets: "latest"` against an empty Kafka topic. Seed the topic or
+use `earliest` for the first run.
 
-## When to bring in [[airflow-3]]
+## What does NOT exist in OSS SDP
 
-SDP runs a pipeline. Airflow orchestrates *when* pipelines run, depends on, and after-the-fact triggers. If you find yourself writing branching logic inside SDP, lift it to an Airflow DAG that runs the SDP pipeline as a task.
+If you see these in a doc or an LLM suggestion, it's Databricks DLT, not OSS:
+
+- `import dlt`, `@dlt.*`, `dlt.read()`
+- `@dp.expect*` / any expectations API — `event_log()` expectation metrics
+- `APPLY CHANGES INTO` / `create_auto_cdc_flow` / Auto CDC (SPARK-56249 unmerged)
+- `refresh_interval` on a materialized view
+- an injected `spark` variable — call `SparkSession.active()`
+
+## When to bring in Airflow
+
+SDP runs *a* pipeline. Scheduling, cross-pipeline dependencies, and retries are
+[[airflow-3]]'s job — an Airflow DAG that invokes `spark-pipelines run` as a
+task. If you're writing branching logic inside SDP, lift it to Airflow.

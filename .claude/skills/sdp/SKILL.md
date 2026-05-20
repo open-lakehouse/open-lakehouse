@@ -1,114 +1,122 @@
 ---
 name: sdp
-description: Spark Declarative Pipelines (SDP) — the declarative pipeline framework in Spark 4.x. Load when designing, running, or debugging a `pipeline.yml`-driven SDP pipeline. Covers naming rules, dry-run/run CLI, dataset types, expectations, and the medallion pattern on this stack.
+description: Spark Declarative Pipelines (SDP) — the declarative pipeline framework in Spark 4.x. Load when designing, running, or debugging an SDP pipeline. Covers the OSS `pyspark.pipelines` API, dataset primitives, the `spark-pipelines` CLI, and the medallion pattern on this stack.
 ---
 
 # Spark Declarative Pipelines
 
-SDP is Spark's declarative pipeline framework: write Python functions decorated with `@dp.materialized_view` (`from pyspark import pipelines as dp`) or SQL files with `CREATE MATERIALIZED VIEW`, and Spark runs them as a managed pipeline with topological scheduling, schema enforcement, and quality checks. SDP replaces hand-rolled `read → transform → writeTo` chains. The CLI is `spark-pipelines` (subcommands: `init`, `dry-run`, `run`).
+SDP defines data pipelines declaratively: decorate Python functions (or write SQL files), and Spark builds the dependency graph, schedules topologically, and handles incremental execution + recovery. You declare WHAT the tables are; SDP handles HOW.
 
-**SDP requires Spark Connect.** `pyspark.pipelines` uses `SparkConnectGraphElementRegistry` internally for the dataflow graph, and `spark-pipelines` spawns its own embedded Connect server (the `SparkConnectPlugin` driver plugin) — note this collides on port 15002 with the standalone `spark-connect-41` server, so stop one while running the other.
+This is **OSS Apache Spark 4.1 SDP** (`pyspark.pipelines`), **not** Databricks DLT. The APIs differ — see "API: OSS vs Databricks DLT" below. The canonical OSS reference repo is [`lisancao/pyspark-sdp`](https://github.com/lisancao/pyspark-sdp) (pattern library + examples); the canonical doc is <https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html>.
 
-Authoritative reference. The user-facing `docs/guides/pipelines.md` points here.
+**SDP requires Spark Connect.** `spark-pipelines` spawns its own embedded Connect server (the `SparkConnectPlugin` driver plugin) — it binds port 15002, the same port as this stack's standalone `spark-connect-41` container. **Stop one while running the other.**
+
+## API: OSS vs Databricks DLT
+
+If you've seen Databricks DLT, unlearn these — they do **not** exist in OSS SDP:
+
+| Databricks DLT (wrong here) | OSS SDP (`pyspark.pipelines`) |
+|------------------------------|-------------------------------|
+| `import dlt` | `from pyspark import pipelines as dp` |
+| `@dlt.table` / `@dlt.view` | `@dp.table` / `@dp.materialized_view` / `@dp.temporary_view` |
+| `dlt.read("x")` / `dlt.read_stream("x")` | `spark.read.table("x")` / `spark.readStream.table("x")` |
+| `spark` is injected | `spark = SparkSession.active()` — call it yourself |
+| `@dlt.expect_or_drop(...)` | **no expectations API in OSS** — filter-split manually (see patterns.md) |
+| `APPLY CHANGES INTO` / Auto CDC | Databricks-only (SPARK-56249 not merged) |
+| `refresh_interval` on a view | Databricks-only — schedule pipeline runs with Airflow/cron |
+
+`pyspark.pipelines` exports exactly: `table`, `materialized_view`, `temporary_view`, `append_flow`, `create_streaming_table`, `create_sink`. Nothing else.
 
 ## Sub-files (load only the one you need)
 
 | Topic | File |
 |-------|------|
-| Patterns (medallion bronze/silver/gold, type-2 SCD, CDC) | [patterns.md](patterns.md) |
-| Streaming pipelines (Kafka → Iceberg) | [streaming.md](streaming.md) |
-| Data sources (file, JDBC, REST, custom) | [data-sources.md](data-sources.md) |
+| Patterns — medallion, dedup, quarantine, stream-static join | [patterns.md](patterns.md) |
+| Streaming pipelines (Kafka → table) | [streaming.md](streaming.md) |
+| Data sources (files, JDBC, existing tables) | [data-sources.md](data-sources.md) |
 | **Targeting Unity Catalog OSS** (the `table_properties` location+provider pattern) | [unity-catalog.md](unity-catalog.md) |
 | Errors & how to read SDP logs | [troubleshooting.md](troubleshooting.md) |
 
 > **Catalog note:** SDP-on-UC works for **Delta tables only**, and requires an
-> explicit `location` + `provider` in `table_properties`. This is non-obvious
-> and verified — read [unity-catalog.md](unity-catalog.md) before targeting
-> `catalog: unity` in a pipeline spec.
+> explicit `location` + `provider` in `table_properties`. Verified, non-obvious
+> — read [unity-catalog.md](unity-catalog.md) before targeting `catalog: unity`.
 
-## Critical naming rules
+## Primitives
 
-Get these wrong and the pipeline won't compile:
+| Decorator | Dataset | Use for |
+|-----------|---------|---------|
+| `@dp.table` | **Streaming table** — append-only, persisted | Ingesting external sources (Kafka, files) and append-only derived tables |
+| `@dp.materialized_view` | **Materialized view** — recomputed | Aggregations, joins, transforms over other SDP tables |
+| `@dp.temporary_view` | **Temp view** — not persisted, pipeline-internal | Intermediate steps not worth materializing |
 
-1. **Function names = dataset names.** `def silver_orders():` produces a dataset named `silver_orders`. Use snake_case.
-2. **Catalog/schema come from `pipeline.yml`, not from `@dlt.table(name=...)`.** Don't fully-qualify in the decorator.
-3. **Reading another SDP dataset**: `dlt.read("silver_orders")` (live view) or `dlt.read_stream("silver_orders")` (streaming live view). Never `spark.read.table(...)` — that bypasses the SDP DAG.
-4. **External tables**: read via `spark.read.format("iceberg").load("iceberg.bronze.raw")` — not via `dlt.read`.
+Rule of thumb: reading Kafka/files → `@dp.table`. Aggregating/joining SDP tables → `@dp.materialized_view`. Reading a streaming source with a materialized view is a common mistake — don't.
+
+## Critical rules
+
+1. **`spark = SparkSession.active()`** at module level (or inside each function). OSS SDP does not inject `spark`. Agents get this wrong constantly.
+2. **Function name = dataset name.** `def orders_silver():` registers a dataset `orders_silver`. snake_case.
+3. **Reference upstream tables INSIDE the function body** via `spark.read.table("name")` / `spark.readStream.table("name")`. SDP infers the DAG from those calls. Never pass upstream datasets as function arguments — that breaks dependency inference.
+4. **No DataFrame analysis inside a pipeline function.** `spark.createDataFrame([...rows...])`, `.collect()`, `.count()` all trigger analysis and SDP rejects them (`ATTEMPT_ANALYSIS_IN_PIPELINE_QUERY_FUNCTION`). Build lazily — `spark.range(n).selectExpr(...)`, or read a source.
+5. **Pipeline functions are pure.** No side effects beyond returning a DataFrame. No API calls, no file uploads.
 
 ## Pipeline definition
 
-`pipeline.yml` (top-level config):
+`spark-pipeline.yml` (the spec — `spark-pipelines init` generates it; don't hand-write blindly):
 
 ```yaml
-name: medallion
-catalog: iceberg            # Unity Catalog catalog
-target: silver              # default schema for outputs (overridable per-dataset)
-configuration:
-  spark.sql.shuffle.partitions: "8"
+name: my-pipeline
+catalog: unity                       # optional — target catalog
+schema: bronze                       # optional — target schema (alias: database). NOT `target`
+storage: file:///tmp/my-pipeline-storage   # required — pipeline state/checkpoints
 libraries:
-  - notebook:
-      path: ./pipeline.py
+  - glob:
+      include: transformations/**     # picks up .py and .sql files
 ```
 
-`pipeline.py` (dataset definitions):
+Transformations (`transformations/orders_silver.py`):
 
 ```python
-import dlt
-from pyspark.sql import functions as f
+from pyspark import pipelines as dp
+from pyspark.sql import DataFrame, SparkSession
 
-@dlt.table(
-    name="orders",
-    comment="Cleaned orders, deduplicated by order_id",
-    table_properties={"quality": "silver"},
-)
-@dlt.expect_or_drop("valid_id", "order_id IS NOT NULL")
-@dlt.expect("non_negative_amount", "amount >= 0")
-def silver_orders():
-    return (
-        spark.read.format("iceberg").load("iceberg.bronze.orders")
-        .filter(f.col("status") != "cancelled")
-        .dropDuplicates(["order_id"])
-    )
+spark = SparkSession.active()
+
+
+@dp.materialized_view(name="orders_silver", comment="Cleaned orders.")
+def orders_silver() -> DataFrame:
+    # Dependency on orders_bronze inferred from this read.
+    return spark.read.table("orders_bronze").where("amount > 0")
+```
+
+SQL transformations (`transformations/orders_gold.sql`) also work:
+
+```sql
+CREATE MATERIALIZED VIEW orders_gold AS
+SELECT order_date, count(*) AS order_count, sum(amount) AS revenue
+FROM orders_silver
+GROUP BY order_date;
 ```
 
 ## Running
 
+`spark-pipelines` is the CLI. From the pipeline project directory:
+
 ```bash
-# Dry run — validates DAG, schema, expectations; runs nothing.
-docker exec spark-master-41 /opt/spark/bin/spark-submit \
-  --packages io.delta:delta-spark_2.13:4.0.1 \
-  /opt/spark/sdp.py --pipeline /scripts/pipelines/spark-pipeline.yml --dry-run
-
-# Full run
-docker exec spark-master-41 /opt/spark/bin/spark-submit \
-  --packages io.delta:delta-spark_2.13:4.0.1 \
-  /opt/spark/sdp.py --pipeline /scripts/pipelines/spark-pipeline.yml
+spark-pipelines init my-pipeline   # scaffold a project (generates the spec)
+spark-pipelines dry-run            # validate the DAG + schemas, run nothing
+spark-pipelines run                # execute
+spark-pipelines run --full-refresh-all   # reset + recompute every dataset
 ```
 
-`scripts/pipelines/pipeline_sdp.py` is a reference SDP pipeline you can copy into a demo.
+On this stack the CLI lives at `/opt/spark/bin/spark-pipelines` inside `spark-master-41`, and needs Python deps the base image lacks — see [unity-catalog.md](unity-catalog.md) "Pre-reqs the base Spark image is missing".
 
-## Dataset types
+## Data quality without an expectations API
 
-| Decorator | Storage | Use for |
-|-----------|---------|---------|
-| `@dlt.table` | Materialized Iceberg/Delta table | Anything other layers read from |
-| `@dlt.view` | Logical, recomputed on read | Intermediate transformations cheap to recompute |
-| `@dlt.table(temporary=True)` | Materialized but excluded from outputs | Debug datasets |
-
-For streaming sources, use the `dlt.read_stream()` reader and have the function return a streaming DataFrame — SDP detects and switches the dataset to streaming.
-
-## Expectations
-
-```python
-@dlt.expect("name", "sql_predicate")          # log, don't drop
-@dlt.expect_or_drop("name", "sql_predicate")  # drop violating rows
-@dlt.expect_or_fail("name", "sql_predicate")  # fail the whole run
-```
-
-Choose by severity: `expect` for soft data-quality signals, `expect_or_drop` for cleansing, `expect_or_fail` for invariants (primary keys, schema contracts).
+OSS SDP has no `@dp.expect*`. For row-level quality, **filter-split**: one `@dp.table` for valid rows, one for quarantined rows, both filtering the same source on a boolean predicate. See [patterns.md](patterns.md) → quarantine. The `lisancao/pyspark-sdp` repo's `patterns/quarantine.py` is the reference implementation.
 
 ## When NOT to use SDP
 
-- One-shot ad-hoc queries → use Spark SQL directly.
-- Anything that does side effects beyond table writes (API calls, file uploads) → SDP assumes pure-function datasets.
-- Workflows that need branching/conditional logic across days → use [[airflow-3]] for orchestration, SDP for the pipeline body.
+- One-shot ad-hoc queries → Spark SQL directly.
+- Sub-second latency that can't tolerate streaming-table checkpointing → raw Structured Streaming / Real-Time Mode.
+- Side-effecting workflows (API calls, branching across days) → orchestrate with [[airflow-3]]; keep SDP for the pipeline body.
+- Custom state machines beyond append/aggregate → `transformWithState` directly.

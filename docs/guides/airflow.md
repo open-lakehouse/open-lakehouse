@@ -272,14 +272,17 @@ with DAG(
     tags=["lakehouse", "custom"],
 ) as dag:
 
-    run_spark_job = BashOperator(
-        task_id="run_spark_job",
+    run_sdp_pipeline = BashOperator(
+        task_id="run_sdp_pipeline",
         bash_command=f"""
-            docker exec {SPARK_CONTAINER} /opt/spark/bin/spark-submit \
-                /scripts/pipelines/pipeline_spark41.py
+            docker exec {SPARK_CONTAINER} sh -c \
+                'cd /scripts/pipelines && spark-pipelines run'
         """,
     )
 ```
+
+SDP pipelines run via the `spark-pipelines` CLI, not `spark-submit`. See
+[`.claude/skills/sdp/`](../../.claude/skills/sdp/).
 
 ### Using Kafka Sensors
 
