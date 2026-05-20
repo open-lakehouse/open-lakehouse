@@ -35,8 +35,14 @@ JAR_LIST=(
     "aws-java-sdk-bundle-1.12.780.jar|https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.780/aws-java-sdk-bundle-1.12.780.jar|350000000"
     "bundle-2.24.6.jar|https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.24.6/bundle-2.24.6.jar|400000000"
     "postgresql-42.7.4.jar|https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar|1000000"
-    "delta-spark_2.13-4.0.1.jar|https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.0.1/delta-spark_2.13-4.0.1.jar|7000000"
-    "delta-storage-4.0.1.jar|https://repo1.maven.org/maven2/io/delta/delta-storage/4.0.1/delta-storage-4.0.1.jar|70000"
+    # Delta 4.2.0 — required for Spark 4.1 ABI compatibility (4.0.x breaks with
+    # NoSuchMethodError on org.apache.spark.internal.LogKey).
+    "delta-spark_2.13-4.2.0.jar|https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.2.0/delta-spark_2.13-4.2.0.jar|8000000"
+    "delta-storage-4.2.0.jar|https://repo1.maven.org/maven2/io/delta/delta-storage/4.2.0/delta-storage-4.2.0.jar|70000"
+    # Unity Catalog OSS Spark connector — lets Spark write Delta tables that
+    # register in UC (catalog `unity`). client jar is its runtime dep.
+    "unitycatalog-spark_2.13-0.3.0.jar|https://repo1.maven.org/maven2/io/unitycatalog/unitycatalog-spark_2.13/0.3.0/unitycatalog-spark_2.13-0.3.0.jar|20000"
+    "unitycatalog-client-0.3.0.jar|https://repo1.maven.org/maven2/io/unitycatalog/unitycatalog-client/0.3.0/unitycatalog-client-0.3.0.jar|250000"
 )
 
 # Get file size (cross-platform)

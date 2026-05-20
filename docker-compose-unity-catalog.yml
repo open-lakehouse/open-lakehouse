@@ -25,7 +25,9 @@
 
 services:
   unity-catalog:
-    image: unitycatalog/unitycatalog:v0.4.0
+    # Using newfrontdocker/unitycatalog (community build) — adds Iceberg
+    # write support that upstream unitycatalog/unitycatalog:v0.4.0 lacks.
+    image: newfrontdocker/unitycatalog:v0.4.1
     container_name: unity-catalog
     ports:
       - "8081:8080"      # REST API + Iceberg REST Catalog endpoint (8081 host, SeaweedFS uses 8080)

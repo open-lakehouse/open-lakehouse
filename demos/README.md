@@ -20,14 +20,15 @@ Every `demos/<name>/README.md` has these five sections, in order:
 
 ## Demos in this build
 
-| Demo | Transport | What it shows |
-|------|-----------|---------------|
-| [`sdp-medallion/`](sdp-medallion/) | `spark-pipelines` (Connect-backed) | Bronze → Silver → Gold built declaratively with Spark Declarative Pipelines. |
-| [`unity-catalog-multi-engine/`](unity-catalog-multi-engine/) | Spark Connect + DuckDB | One catalog, multiple engines reading the same Iceberg table. |
-| [`realtime-mode/`](realtime-mode/) | Spark Connect (Structured Streaming) | Kafka → Iceberg streaming with watermarked dedup over Connect. |
-| [`local-mode-spark/`](local-mode-spark/) | Local (no cluster) — **NOT YET IMPLEMENTED** | In-process SparkSession for offline / laptop-only demos. Placeholder for the `--spark-local` mode that will land later. |
+| Demo | Status | Transport | What it shows |
+|------|--------|-----------|---------------|
+| [`sdp-medallion/`](sdp-medallion/) | **Built** | `spark-pipelines` | Bronze → Silver → Gold via Spark Declarative Pipelines, materialized as Delta tables in Unity Catalog OSS. |
+| [`unity-catalog-multi-engine/`](unity-catalog-multi-engine/) | Placeholder | Spark Connect + DuckDB | One catalog, multiple engines reading the same table. |
+| [`realtime-mode/`](realtime-mode/) | Placeholder | Spark Connect (Structured Streaming) | Kafka → Delta streaming with watermarked dedup over Connect. |
+| [`local-mode-spark/`](local-mode-spark/) | **Not yet implemented** | Local (no cluster) | In-process SparkSession for offline / laptop-only demos. Backs the `--spark-local` flag. |
 
-All four are `.gitkeep` placeholders in this commit — content is added demo-by-demo, never fabricated. To scaffold:
+`sdp-medallion` is a working demo with a full README. The other three are
+placeholders — content is added demo-by-demo, never fabricated. To scaffold:
 
 ```bash
 cp -r demos/_template demos/<name>

@@ -4,9 +4,12 @@ You are helping with **open-lakehouse**, a composable OSS lakehouse demo platfor
 
 ## Stack
 
-Spark 4.1 (Connect-first) · Kafka 3.6 · Airflow 3.1 · Iceberg 1.10 + Delta 4.0 (both extensions enabled by default) · Unity Catalog OSS 0.4.x · MLflow 3.1 · SeaweedFS (S3) · PostgreSQL.
+Spark 4.1 (Connect-first) · Kafka 3.6 · Airflow 3.1 · Delta 4.2 + Iceberg 1.10 (both extensions enabled) · Unity Catalog OSS 0.4.x · MLflow 3.1 · SeaweedFS (S3) · PostgreSQL.
 
-Catalog naming: Iceberg tables live under `iceberg.<schema>.<table>` (UC REST). Delta tables live under `spark_catalog.<schema>.<table>` (DeltaCatalog overrides the Spark default).
+Catalogs (verified — see `.claude/skills/unity-catalog-oss/`):
+- `unity.<schema>.<table>` — Unity Catalog OSS via its Spark connector. **Delta only. Primary write path.**
+- `iceberg.<schema>.<table>` — UC OSS Iceberg REST endpoint. **Read-only** — UC OSS 0.4.x exposes no Iceberg write endpoints.
+- `spark_catalog.<schema>.<table>` — default catalog set to `DeltaCatalog`; path-based / local Delta.
 
 Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Databricks-managed destination in `terraform-databricks/`.
 
@@ -16,7 +19,7 @@ Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Datab
 2. **Spark is 4.1 only.** No `--version` flag. Compose file is `docker-compose-spark41.yml`. Master container is `spark-master-41`.
 3. **Connect-first transport.** Default CLI mode is `--spark-connect`. Spark Connect server runs in `spark-connect-41` on port 15002. Clients use `SparkSession.builder.remote("sc://localhost:15002")` or read `LAKEHOUSE_SPARK_REMOTE`. SDP requires Connect (pyspark.pipelines uses it internally). `--spark-local` is a stub — exits with "not yet implemented."
 4. **Don't `docker compose down -v` without explicit user consent.** `-v` wipes named volumes (UC metadata, MLflow runs, Airflow history). `./lakehouse stop` is safe and is what you should default to.
-5. **Empty `demos/` is intentional.** Each demo follows the contract in `demos/_template/`. Don't fabricate a demo to "fill the space" — scaffold from the template when the user asks for one. The four demo slots are `sdp-medallion`, `unity-catalog-multi-engine`, `realtime-mode`, and `local-mode-spark` (deferred).
+5. **Demo slots.** Four: `sdp-medallion` (**built** — SDP→UC→Delta medallion), `unity-catalog-multi-engine`, `realtime-mode` (placeholders), `local-mode-spark` (deferred). Each follows the `demos/_template/` contract. Don't fabricate placeholder demos — scaffold from the template when asked.
 6. **AGENTS.md is a pointer**, not a duplicate of this file. Keep CLAUDE.md authoritative.
 
 ## File index — where to look for what
@@ -59,9 +62,10 @@ For the full deterministic runbook, see `.claude/skills/lakehouse-lifecycle/star
 
 - Spark 4.1.0 (Scala 2.13, Java 21)
 - Iceberg 1.10.0
-- Delta 4.0.1
+- Delta 4.2.0 (4.0.x breaks on Spark 4.1 — ABI mismatch)
 - Airflow 3.1.6
-- Unity Catalog OSS 0.4.0
+- Unity Catalog OSS 0.4.1 (`newfrontdocker/unitycatalog:v0.4.1`)
+- Unity Catalog Spark connector 0.3.0
 - MLflow 3.1
 - AWS SDK v2 2.24.6 (exact, for Hadoop 3.4.1 compatibility)
 

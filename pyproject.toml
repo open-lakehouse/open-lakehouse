@@ -9,7 +9,7 @@ license = "Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "pyspark (>=4.0.0,<5.0.0)",
+    "pyspark[connect] (>=4.0.0,<5.0.0)",
     "kafka-python (>=2.3.0,<3.0.0)",
     "pyarrow (>=15.0.0,<19.0.0)",
     "numpy (>=1.26.0,<3.0.0)",
