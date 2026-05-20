@@ -73,19 +73,40 @@ reached). But the prior run's data is still at the table's storage path, and
 `CREATE TABLE` refuses a non-empty location. A run that fails partway also
 poisons its locations the same way (a stray empty `_delta_log/`).
 
-`--full-refresh-all` does **not** help — it also goes through `CREATE`. Object
-stores retain empty directory markers that survive `FileSystem.delete`, so
-purging the path from outside is unreliable too.
+`--full-refresh-all` does **not** help — it also goes through `CREATE`.
 
 **Workaround:** treat SDP runs as single-shot. Run the pipeline once; to run
-again, change the dataset names (fresh storage paths) or point at a clean
-warehouse. The demo READMEs that hit this (`sdp-streaming-batch-sql`,
-`sdp-cli-lifecycle`, `sdp-imperative-to-declarative`) all state "run once per
-teardown".
+again, purge the table's storage path first, e.g. via the SeaweedFS shell:
+
+```bash
+echo "fs.rm -r /buckets/lakehouse/warehouse/sdp/<table>" \
+  | /opt/seaweedfs/weed shell -master=localhost:9333
+```
+
+The demo READMEs that hit this (`sdp-streaming-batch-sql`, `sdp-cli-lifecycle`,
+`sdp-imperative-to-declarative`) all state "run once per teardown".
 
 Root cause is SDP's materialization strategy on object storage, not Delta. A
 real fix is upstream: SDP using `CREATE OR REPLACE` / overwrite semantics, or a
 persistent metastore so reruns take the refresh path.
+
+### S3 `InternalError` / HTTP 500 during writes or deletes
+SeaweedFS's S3 gateway returns HTTP 500 (`We encountered an internal error`) on
+two operations: bulk `DeleteObjects`, and the Hadoop `FileOutputCommitter`
+rename's directory-marker cleanup (*"Remove S3 Dir Markers"*). Symptoms:
+`TASK_WRITE_FAILED` / `Could not rename …_temporary/…` on a parquet write, or
+`AWSStatus500Exception` on a recursive delete.
+
+Fixed in `config/spark/spark-defaults.conf` (and `.example`):
+
+```
+spark.hadoop.fs.s3a.multiobjectdelete.enable   false   # delete one at a time
+spark.hadoop.fs.s3a.directory.marker.retention keep    # skip marker deletes
+spark.sql.sources.default                      delta   # Delta write = no rename
+```
+
+Delta writes commit via `_delta_log` with no committer rename, so defaulting
+new tables to Delta sidesteps the parquet write path entirely.
 
 ### `BindException: ... 15002`
 `spark-pipelines` embeds its own Connect server on 15002 — the standalone
