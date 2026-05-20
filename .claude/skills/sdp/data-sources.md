@@ -1,108 +1,103 @@
 # SDP data sources
 
-Reading from non-SDP sources inside a pipeline.
-
-## Files (Parquet/JSON/CSV)
+Reading non-SDP sources inside a pipeline. Every transformation starts with:
 
 ```python
-@dlt.table
-def bronze_files():
-    return (spark.read
-            .format("parquet")
-            .schema(MY_SCHEMA)              # always declare schema
-            .load("s3a://landing/orders/"))
+from pyspark import pipelines as dp
+from pyspark.sql import DataFrame, SparkSession
+
+spark = SparkSession.active()
 ```
 
-For continuous arrival, use `readStream` + `cloudFiles` (Auto Loader equivalent — partial in OSS Spark; fall back to file-source streaming):
+## Files (Parquet / JSON / CSV)
 
 ```python
-@dlt.table
-def bronze_files_stream():
-    return (spark.readStream
-            .format("parquet")
-            .schema(MY_SCHEMA)
-            .option("maxFilesPerTrigger", 100)
-            .load("s3a://landing/orders/"))
+@dp.materialized_view(name="bronze_files")
+def bronze_files() -> DataFrame:
+    return (
+        spark.read.format("parquet")
+        .schema("order_id STRING, amount DOUBLE, event_ts TIMESTAMP")  # declare schema
+        .load("s3a://lakehouse/landing/orders/")
+    )
 ```
 
-## JDBC (external relational sources)
+Continuous file arrival — a streaming `@dp.table` over the file source:
 
 ```python
-@dlt.table
-def bronze_postgres():
-    return (spark.read.format("jdbc")
-            .option("url", "jdbc:postgresql://host:5432/db")
-            .option("dbtable", "public.customers")
-            .option("user", "${secrets.pg_user}")
-            .option("password", "${secrets.pg_pass}")
-            .load())
+@dp.table(name="bronze_files_stream")
+def bronze_files_stream() -> DataFrame:
+    return (
+        spark.readStream.format("parquet")
+        .schema("order_id STRING, amount DOUBLE, event_ts TIMESTAMP")
+        .option("maxFilesPerTrigger", 100)
+        .load("s3a://lakehouse/landing/orders/")
+    )
 ```
 
-Prefer pulling into bronze rather than reading JDBC directly from silver/gold — pinning a snapshot makes the pipeline deterministic.
+(Databricks Auto Loader / `cloudFiles` is not OSS — use the plain file-source
+streaming reader.)
 
 ## Kafka
 
 See [streaming.md](streaming.md).
 
-## REST / custom
-
-Wrap in a regular `@dlt.table` whose function pulls via `requests`, returns a DataFrame:
+## JDBC (external relational sources)
 
 ```python
-import dlt, requests
-from pyspark.sql.types import StructType, StructField, StringType
-
-@dlt.table
-def bronze_api():
-    resp = requests.get("https://api.example.com/orders", timeout=30)
-    resp.raise_for_status()
-    return spark.createDataFrame(resp.json(), schema=API_SCHEMA)
+@dp.materialized_view(name="bronze_customers")
+def bronze_customers() -> DataFrame:
+    return (
+        spark.read.format("jdbc")
+        .option("url", "jdbc:postgresql://localhost:5432/source_db")
+        .option("dbtable", "public.customers")
+        .option("user", "...")
+        .option("password", "...")
+        .load()
+    )
 ```
 
-This bakes the API call into pipeline execution. Cache aggressively at the bronze layer — don't re-call the API from silver.
+Pull external JDBC into a bronze dataset, not directly from silver/gold —
+pinning the snapshot at bronze keeps the pipeline deterministic.
 
-## Iceberg tables (existing, not SDP-owned)
+## Existing tables (Delta / Iceberg, not SDP-owned)
 
 ```python
-@dlt.table
-def silver_external():
-    return (spark.read.format("iceberg").load("iceberg.external.orders"))
+@dp.materialized_view(name="silver_from_external")
+def silver_from_external() -> DataFrame:
+    # An existing UC Delta table:
+    return spark.read.table("unity.external.orders")
+    # ...or an Iceberg table via the read-only iceberg catalog:
+    # return spark.read.table("iceberg.external.orders")
 ```
 
-Or via SQL:
+`spark.sql("SELECT ... FROM unity.external.orders")` works too — SDP infers the
+dependency from the table reference in the SQL string.
+
+## Synthetic data (demos)
+
+Don't use `spark.createDataFrame([...rows...])` — it triggers analysis and SDP
+rejects it. Build lazily from `spark.range`:
 
 ```python
-@dlt.table
-def silver_external():
-    return spark.sql("SELECT * FROM iceberg.external.orders")
+@dp.materialized_view(name="orders_bronze")
+def orders_bronze() -> DataFrame:
+    return spark.range(5).selectExpr(
+        "id + 1 AS order_id",
+        "concat('cust_', cast(id + 1 AS STRING)) AS customer",
+        "(id + 1) * 10.0 AS amount",
+    )
 ```
 
-## Delta tables
+## Output format
 
-```python
-@dlt.table
-def silver_delta_input():
-    return spark.read.format("delta").load("s3a://warehouse/delta/orders")
-```
+On this stack SDP outputs **Delta** tables (Iceberg writes via UC are not
+supported — UC OSS's Iceberg REST adapter is read-only). When the pipeline
+targets `catalog: unity`, each table needs `table_properties={"location":
+"s3://...", "provider": "delta"}` — see [unity-catalog.md](unity-catalog.md).
 
-Works inside the same pipeline as Iceberg outputs — SDP doesn't care about format on the read side.
+## REST / custom sources
 
-## File-format choice for SDP outputs
-
-In `pipeline.yml`:
-
-```yaml
-configuration:
-  pipelines.table.format: "iceberg"     # default for this stack
-  # or "delta"
-```
-
-Per-table override via decorator:
-
-```python
-@dlt.table(table_properties={"pipelines.table.format": "delta"})
-def silver_orders():
-    ...
-```
-
-Iceberg is the default for the open-lakehouse stack. Use Delta only when downstream consumers require it.
+OSS SDP pipeline functions should stay pure (return a DataFrame, no side
+effects). Calling a REST API inside a function works but bakes the call into
+every pipeline run and isn't idempotent. Prefer landing API data to files /
+Kafka with a separate job, then ingesting that with SDP.

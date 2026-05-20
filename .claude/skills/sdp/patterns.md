@@ -1,65 +1,137 @@
 # SDP patterns
 
-Common shapes you'll write inside an SDP pipeline.
+Common shapes, in the OSS `pyspark.pipelines` API. Runnable reference
+implementations live in [`lisancao/pyspark-sdp`](https://github.com/lisancao/pyspark-sdp)
+under `src/pyspark_sdp/patterns/` and `examples/python/`.
+
+Every transformation file starts the same way:
+
+```python
+from pyspark import pipelines as dp
+from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import functions as f
+
+spark = SparkSession.active()
+```
 
 ## Medallion: bronze → silver → gold
 
 ```python
-import dlt
-from pyspark.sql import functions as f
+# BRONZE — raw ingest. External source → @dp.table (streaming table).
+@dp.table(name="orders_bronze", comment="Raw orders.")
+def orders_bronze() -> DataFrame:
+    return (
+        spark.readStream.format("kafka")
+        .option("kafka.bootstrap.servers", "kafka:9092")
+        .option("subscribe", "orders")
+        .load()
+        .select(
+            f.from_json(f.col("value").cast("string"),
+                        "order_id STRING, amount DOUBLE, event_ts TIMESTAMP").alias("o"),
+            f.current_timestamp().alias("_ingested_at"),
+        )
+        .select("o.*", "_ingested_at")
+    )
 
-# BRONZE — raw, append-only, no transformations beyond schema enforcement
-@dlt.table(table_properties={"quality": "bronze"})
-def bronze_orders():
-    return (spark.read.format("iceberg").load("iceberg.landing.orders_raw")
-            .withColumn("_ingested_at", f.current_timestamp()))
+# SILVER — cleaned. Derives from an SDP table → @dp.materialized_view.
+@dp.materialized_view(name="orders_silver", comment="Cleaned, deduplicated.")
+def orders_silver() -> DataFrame:
+    return (
+        spark.read.table("orders_bronze")        # dependency inferred from this read
+        .dropDuplicates(["order_id"])
+        .withColumn("order_date", f.to_date("event_ts"))
+        .where("amount >= 0")
+    )
 
-# SILVER — cleaned, deduplicated, typed
-@dlt.table(table_properties={"quality": "silver"})
-@dlt.expect_or_drop("valid_id", "order_id IS NOT NULL")
-def silver_orders():
-    return (dlt.read("bronze_orders")
-            .dropDuplicates(["order_id"])
-            .withColumn("order_date", f.to_date("event_ts"))
-            .filter(f.col("amount") >= 0))
-
-# GOLD — aggregated, business-readable
-@dlt.table(table_properties={"quality": "gold"})
-def gold_daily_revenue():
-    return (dlt.read("silver_orders")
-            .groupBy("order_date", "region")
-            .agg(f.sum("amount").alias("revenue"),
-                 f.count("*").alias("order_count")))
+# GOLD — aggregated.
+@dp.materialized_view(name="orders_gold", comment="Daily revenue.")
+def orders_gold() -> DataFrame:
+    return (
+        spark.read.table("orders_silver")
+        .groupBy("order_date")
+        .agg(f.sum("amount").alias("revenue"), f.count("*").alias("order_count"))
+    )
 ```
 
-Three tables, three quality tiers. The SDP DAG runs them in order — never refer forward.
+Three datasets, three tiers. SDP orders them from the `spark.read.table(...)`
+calls — never refer forward to a not-yet-defined dataset.
 
-## Slowly changing dimension (type-2)
+`demos/sdp-medallion/` is a working version of this pattern materialized into
+Unity Catalog. Note: when targeting `catalog: unity`, every table needs
+`table_properties={"location": "s3://...", "provider": "delta"}` — see
+[unity-catalog.md](unity-catalog.md).
+
+## Quarantine (data quality — the OSS substitute for expectations)
+
+OSS SDP has **no** `@dp.expect*` decorators. Route invalid rows to a separate
+table by registering two `@dp.table`s that filter the same source on a boolean
+predicate and its negation:
 
 ```python
-@dlt.table
-def dim_customer():
-    return (dlt.read_stream("bronze_customer_changes")
-            .selectExpr("customer_id", "name", "address", "event_ts AS valid_from")
-            # SDP CDC API
-            .transform(dlt.apply_changes(
-                target="dim_customer",
-                source="bronze_customer_changes",
-                keys=["customer_id"],
-                sequence_by="event_ts",
-                stored_as_scd_type=2,
-            )))
+from pyspark.sql.functions import expr
+
+def with_quarantine(name, quarantine_name, source_table, validation,
+                     streaming=True):
+    """Register a clean table + a quarantine table off one source."""
+    pred = expr(validation)
+
+    @dp.table(name=name)
+    def _clean() -> DataFrame:
+        reader = spark.readStream if streaming else spark.read
+        return reader.table(source_table).filter(pred)
+
+    @dp.table(name=quarantine_name)
+    def _quarantine() -> DataFrame:
+        reader = spark.readStream if streaming else spark.read
+        return reader.table(source_table).filter(~pred)
+
+    return _clean, _quarantine
+
+# usage
+with_quarantine("orders_valid", "orders_quarantine", "orders_bronze",
+                "amount > 0 AND order_id IS NOT NULL")
 ```
 
-Use `dlt.apply_changes(..., stored_as_scd_type=1)` for overwrite-in-place semantics.
+The source is read twice; Spark's optimizer usually shares the scan (verify
+with `.explain()`). `validation` must be a SQL expression / Column — arbitrary
+Python callables need a UDF, which kills predicate pushdown. This is the
+`patterns/quarantine.py` shape from `lisancao/pyspark-sdp`.
+
+## Deduplication
+
+```python
+@dp.materialized_view(name="orders_deduped")
+def orders_deduped() -> DataFrame:
+    return spark.read.table("orders_bronze").dropDuplicates(["order_id"])
+```
+
+For streaming dedup, set a watermark first so state is bounded — see
+[streaming.md](streaming.md).
+
+## Slowly-changing dimensions / CDC
+
+**Auto CDC (`create_auto_cdc_flow` / `APPLY CHANGES INTO`) is Databricks-only**
+— SPARK-56249 is not merged into OSS Spark 4.1. For SCD in OSS SDP today you
+hand-roll it: a streaming `@dp.table` for the change feed, then a
+`@dp.materialized_view` that computes current-state with window functions, or
+an `@dp.append_flow` into a streaming table. Don't reach for `dp.apply_changes`
+— it doesn't exist.
 
 ## Idempotent re-runs
 
-SDP's tables are idempotent by default — re-running the pipeline overwrites the outputs deterministically (or, for streaming, picks up from the checkpoint). To force a clean re-run, drop the target tables manually or use the `--full-refresh` flag.
+SDP datasets are recomputed deterministically on re-run. To force a full
+recompute: `spark-pipelines run --full-refresh-all` (or `--full-refresh
+<dataset>`). Note: re-running over an existing **UC** table can fail —
+UC's connector doesn't support truncate; drop the table first
+([unity-catalog.md](unity-catalog.md)).
 
-## Avoiding common mistakes
+## Common mistakes
 
-- Don't `spark.sql("CREATE TABLE ...")` inside an SDP pipeline. SDP owns the DDL.
-- Don't read from a downstream dataset (cycle). The DAG is acyclic.
-- Don't pass a non-deterministic config (`f.current_timestamp()` outside of an ingestion column) — breaks idempotence.
-- Don't write to the same target as another SDP dataset. One target = one decorator.
+- `import dlt` — wrong framework. `from pyspark import pipelines as dp`.
+- Forgetting `spark = SparkSession.active()` — OSS SDP does not inject `spark`.
+- `spark.createDataFrame([...rows...])` inside a function — triggers analysis,
+  rejected. Use `spark.range(n).selectExpr(...)` for synthetic data.
+- Passing an upstream dataset as a function arg — breaks DAG inference. Read it
+  inside the body.
+- `spark.sql("CREATE TABLE ...")` inside a pipeline — SDP owns the DDL.
+- Reading a downstream dataset — cycles are rejected; the DAG is acyclic.
