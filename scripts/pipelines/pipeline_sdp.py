@@ -9,8 +9,8 @@ OSS Spark 4.1 `pyspark.pipelines` — NOT Databricks DLT. See
 for why every table carries an explicit `location` + `provider`.
 
 Run:
-    # generate the parquet inputs first
-    ./lakehouse testdata generate --days 90 && ./lakehouse testdata load
+    # generate the parquet inputs first (7 days ~= demo scale; 90 days is ~5 GB)
+    ./lakehouse testdata generate --days 7
 
     docker exec spark-master-41 sh -c \
       'cd /scripts/pipelines && spark-pipelines run'
@@ -86,47 +86,22 @@ def bronze_dim_locations():
 
 @dp.materialized_view(name="bronze_orders", table_properties=_delta("bronze_orders"))
 def bronze_orders():
-    """Order lifecycle events from the batch parquet source."""
-    return spark.read.parquet("/data/events/orders_90d.parquet").withColumn(
+    """Order lifecycle events from the batch parquet source.
+
+    Reads the 7-day dataset (`./lakehouse testdata generate --days 7`). The
+    generator names the file by day count; regenerate at a different scale
+    and this path must match.
+    """
+    return spark.read.parquet("/data/events/orders_7d.parquet").withColumn(
         "event_timestamp", f.to_timestamp(f.regexp_replace("ts", "T", " "))
     )
 
 
-# Kafka ingestion → streaming table (@dp.table over a streaming source).
-@dp.table(
-    name="bronze_orders_streaming", table_properties=_delta("bronze_orders_streaming")
-)
-def bronze_orders_streaming():
-    """Order lifecycle events from the Kafka `orders` topic."""
-    event_schema = StructType(
-        [
-            StructField("event_id", StringType()),
-            StructField("event_type", StringType()),
-            StructField("ts", StringType()),
-            StructField("ts_seconds", IntegerType()),
-            StructField("order_id", StringType()),
-            StructField("location_id", IntegerType()),
-            StructField("sequence", IntegerType()),
-            StructField("body", StringType()),
-        ]
-    )
-
-    parsed = (
-        spark.readStream.format("kafka")
-        .option("kafka.bootstrap.servers", "kafka:9092")
-        .option("subscribe", "orders")
-        .option("startingOffsets", "latest")
-        .load()
-        .select(
-            f.from_json(f.col("value").cast("string"), event_schema).alias("event"),
-            f.col("timestamp").alias("kafka_timestamp"),
-        )
-        .select("event.*", "kafka_timestamp")
-    )
-
-    return parsed.withColumn(
-        "event_timestamp", f.to_timestamp(f.regexp_replace("ts", "T", " "))
-    )
+# Kafka streaming ingestion of the same orders is intentionally NOT here.
+# It would need the spark-sql-kafka JAR on the SDP driver and a populated
+# `orders` topic, and nothing downstream consumes it — this pipeline is the
+# batch medallion reference. The Kafka → streaming-table pattern lives in
+# `.claude/skills/sdp/streaming.md` and the `realtime-mode` demo slot.
 
 
 # =============================================================================
