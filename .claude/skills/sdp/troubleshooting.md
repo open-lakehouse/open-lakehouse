@@ -37,9 +37,28 @@ Targeting `catalog: unity` without `table_properties={"location": ...,
 [unity-catalog.md](unity-catalog.md).
 
 ### `Table does not support truncates`
-Re-running over an existing UC table — UC's connector has no truncate. Drop
-the table first (`curl -X DELETE .../tables/unity.<schema>.<name>`), or
-`spark-pipelines run --full-refresh-all` after dropping.
+Re-running an SDP pipeline over **existing** UC tables. A `@dp.materialized_view`
+is recomputed each run; SDP's refresh path issues `TRUNCATE TABLE` to clear the
+table first, and UC OSS's Spark connector (`UCSingleCatalog`) does not implement
+the truncate capability (`SupportsTruncate`). New MVs go through `CREATE` (works);
+existing ones go through refresh → `TRUNCATE` (fails).
+
+**Verified workaround (2026-05-20):** drop the tables, then run.
+
+```bash
+for t in <table1> <table2> ...; do
+  curl -s -X DELETE "http://localhost:8081/api/2.1/unity-catalog/tables/unity.<schema>.${t}"
+done
+spark-pipelines run
+```
+
+`--full-refresh-all` does **not** help — SDP's full-refresh path also truncates;
+tested, same error. The demo ships `demos/sdp-medallion/teardown.sh` which does
+exactly the drop loop — run teardown, then re-run the pipeline.
+
+Root cause is the UC connector, not SDP or the UC server. A real fix is
+upstream: the connector implementing `SupportsTruncate`, or SDP's MV refresh
+using overwrite semantics instead of truncate.
 
 ### `BindException: ... 15002`
 `spark-pipelines` embeds its own Connect server on 15002 — the standalone
