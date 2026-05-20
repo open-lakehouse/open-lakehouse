@@ -9,10 +9,10 @@
 #   # Open http://localhost:8889 (no token required)
 #   docker compose -f docker-compose-notebooks.yml down
 #
-# Notebooks run Spark in local mode. For cluster execution, submit to
-# spark-master-41:
-#   docker exec spark-master-41 /opt/spark/bin/spark-submit \
-#     /scripts/pipelines/pipeline_spark41.py
+# Notebooks run Spark in local mode. For cluster execution, connect to the
+# Spark Connect server (sc://localhost:15002) or run an SDP pipeline:
+#   docker exec spark-master-41 sh -c \
+#     'cd /scripts/pipelines && spark-pipelines run'
 
 services:
   jupyter:
