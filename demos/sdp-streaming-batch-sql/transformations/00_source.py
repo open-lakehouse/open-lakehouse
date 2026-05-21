@@ -11,11 +11,11 @@ seed.py for why a seeded table rather than a `rate` stream.
 """
 
 from pyspark import pipelines as dp
-from pyspark.sql import SparkSession
+from pyspark.sql import DataFrame, SparkSession
 
 spark = SparkSession.active()
 
 
 @dp.table(name="sxb_raw", comment="Events ingested as a stream from the seed table.")
-def sxb_raw():
+def sxb_raw() -> DataFrame:
     return spark.readStream.format("delta").load("file:///tmp/sxb-seed")

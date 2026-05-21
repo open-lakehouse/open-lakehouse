@@ -48,6 +48,28 @@ def orders_enriched() -> DataFrame:
 `examples/python/01_streaming_table.py` in `lisancao/pyspark-sdp` is the
 canonical version of this chain.
 
+## SQL form — `CREATE STREAMING TABLE`
+
+Streaming tables can also be defined in `.sql` transformation files.
+`CREATE STREAMING TABLE` + `FROM STREAM <source>` is the SQL equivalent of a
+`@dp.table` whose function returns a streaming DataFrame:
+
+```sql
+CREATE STREAMING TABLE orders_enriched
+AS SELECT order_id, amount, to_date(event_ts) AS order_date
+   FROM STREAM orders_bronze
+   WHERE amount IS NOT NULL;
+```
+
+`FROM STREAM <name>` is the SQL counterpart of `spark.readStream.table(name)` —
+it keeps the dataset streaming. Plain `FROM <name>` (no `STREAM`) instead gives
+a batch materialized view over the current snapshot. `STREAM` takes a dataset
+name, not a table-valued function — `read_files()` / `read_kafka()` are
+Databricks extensions that do not exist in OSS Spark 4.1, so a SQL streaming
+table still needs its raw source defined as a Python `@dp.table`.
+`demos/sdp-streaming-batch-sql/` runs a streaming table and a materialized view
+side by side.
+
 ## Watermarks
 
 Set a watermark before any stateful streaming op (dedup, windowed aggregation)
