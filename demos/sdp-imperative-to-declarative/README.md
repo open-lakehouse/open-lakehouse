@@ -17,8 +17,16 @@ deleted.
 - Spark 4.1 + Connect server: `./lakehouse start all`
 - The imperative script connects via `sc://localhost:15002`; the declarative
   pipeline runs through `spark-pipelines`.
-- Both target `spark_catalog.default` (Delta). Distinct table prefixes
-  (`imp_orders_*` vs `dec_orders_*`) keep the two versions side by side.
+- Both versions materialize into **Unity Catalog** under `unity.i2d`, with
+  distinct table prefixes (`imp_orders_*` vs `dec_orders_*`). SDP does not
+  create schemas — create `unity.i2d` once:
+
+```bash
+curl -s -X POST http://localhost:8081/api/2.1/unity-catalog/schemas \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"i2d","catalog_name":"unity"}'
+```
+
 - **Generated event data** at `data/events/orders_7d.parquet` — both versions
   read the `order_created` events from it (~300k rows). Generate it with
   `./lakehouse testdata generate`, then verify:
@@ -39,14 +47,15 @@ Expected stdout (counts depend on the generated dataset):
 
 ```
 imperative run complete:
-  spark_catalog.default.imp_orders_bronze: 299689 rows
-  spark_catalog.default.imp_orders_silver: 285255 rows
-  spark_catalog.default.imp_orders_gold: 7 rows
+  unity.i2d.imp_orders_bronze: 299689 rows
+  unity.i2d.imp_orders_silver: 295888 rows
+  unity.i2d.imp_orders_gold: 7 rows
 ```
 
 Note what the script had to spell out: session creation, the `body` JSON
-schema, three explicit `write...saveAsTable` calls, and the ordering (bronze
-before silver before gold) enforced only by the order of statements.
+schema, three explicit `writeTo(...)` calls — each setting the `location` and
+`delta.feature.catalogManaged` properties UC's connector demands — and the
+ordering (bronze before silver before gold) enforced only by statement order.
 
 ### The declarative version
 
@@ -65,9 +74,9 @@ docker start spark-connect-41
 Expected stdout:
 
 ```
-Flow spark_catalog.default.dec_orders_bronze has COMPLETED.
-Flow spark_catalog.default.dec_orders_silver has COMPLETED.
-Flow spark_catalog.default.dec_orders_gold has COMPLETED.
+Flow unity.i2d.dec_orders_bronze has COMPLETED.
+Flow unity.i2d.dec_orders_silver has COMPLETED.
+Flow unity.i2d.dec_orders_gold has COMPLETED.
 Run is COMPLETED.
 ```
 
@@ -76,17 +85,23 @@ SDP ran the three flows in dependency order — which it derived itself. The
 
 ## Expected output
 
-Both versions produce three Delta tables (`imp_orders_*` from the imperative
-script, `dec_orders_*` from SDP) over the real order events: ~300k `bronze`
-rows (parsed `order_created` events) → valid-total `silver` → 7-row daily
-`gold` rollup (revenue + order count per day).
+Both versions produce three Delta tables under `unity.i2d` (`imp_orders_*` from
+the imperative script, `dec_orders_*` from SDP) over the real order events:
+~300k `bronze` rows (parsed `order_created` events) → valid-total `silver` →
+7-row daily `gold` rollup (revenue + order count per day).
+
+```bash
+curl -s "http://localhost:8081/api/2.1/unity-catalog/tables?catalog_name=unity&schema_name=i2d" \
+  | python3 -c 'import sys,json; [print(t["name"], t["table_type"]) for t in json.load(sys.stdin)["tables"]]'
+```
 
 The teaching point is the diff, not the data:
 
 | | imperative_pipeline.py | declarative/transformations/pipeline.py |
 |--|--|--|
 | Session | `SparkSession.builder.remote(...)` | `SparkSession.active()` |
-| Per table | explicit `.write...saveAsTable()` | just `return` a DataFrame |
+| Per table | explicit `writeTo(...).tableProperty(...)` | just `return` a DataFrame |
+| UC properties | you set `location` + `catalogManaged` by hand | SDP sets `location` from `table_properties` |
 | Ordering | statement order, by hand | inferred from `spark.read.table()` |
 | Failure handling | you re-run the whole script | SDP resolves the graph and reports per-flow status |
 
@@ -96,17 +111,21 @@ The teaching point is the diff, not the data:
 bash demos/sdp-imperative-to-declarative/teardown.sh
 ```
 
-Drops all six tables and removes the pipeline storage.
+Drops all six `unity.i2d` tables (via the UC API) and removes the pipeline
+storage. Delta files under `s3://lakehouse/warehouse/sdp/v2/i2d/` are left in
+place — clear them with an S3 client for a fully clean slate.
 
 ## Notes
 
+- **UC managed vs external.** The imperative `writeTo(...)` path creates UC
+  *catalog-managed* tables (it must set `delta.feature.catalogManaged`); SDP
+  creates UC *external* tables (it passes a `location` and cannot create
+  catalog-managed tables — Delta rejects that). Both register under `unity.i2d`.
 - **Run once per teardown.** `spark-pipelines run` materializes each dataset
-  with a fresh `CREATE TABLE`. Re-running without a teardown in between fails
-  with `DELTA_CREATE_TABLE_WITH_NON_EMPTY_LOCATION` — the previous run's data
-  is still at the table's storage path. This is a known rough edge of SDP on
-  object storage; see `.claude/skills/sdp/troubleshooting.md`.
-- The imperative script uses `mode("overwrite")`, so it is safely rerunnable
-  on its own.
+  with a fresh `CREATE TABLE`. Re-running without a teardown in between fails —
+  the previous run's data is still at the table's storage path. This is a known
+  rough edge of SDP on object storage; see
+  `.claude/skills/sdp/troubleshooting.md`.
 
 ## See also
 

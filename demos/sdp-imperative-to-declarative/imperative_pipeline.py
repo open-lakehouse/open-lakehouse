@@ -28,6 +28,24 @@ BODY = (
     "total DOUBLE"
 )
 
+# Tables land in Unity Catalog under `unity.i2d`. UC's connector needs an
+# explicit location, so each write sets `.option("path", ...)` — YOU manage
+# the storage layout, where SDP would derive it.
+WAREHOUSE = "s3://lakehouse/warehouse/sdp/v2/i2d"
+
+
+def save(df, name):
+    """Write df as a UC-registered Delta table — YOU set the table properties
+    UC's connector requires (location, the catalog-managed feature flag)."""
+    (
+        df.writeTo(f"unity.i2d.{name}")
+        .using("delta")
+        .tableProperty("location", f"{WAREHOUSE}/{name}")
+        .tableProperty("delta.feature.catalogManaged", "supported")
+        .createOrReplace()
+    )
+
+
 # Step 1: bronze. YOU decide this runs first.
 bronze = (
     spark.read.parquet("file:///data/events/orders_7d.parquet")
@@ -42,34 +60,28 @@ bronze = (
         f.size("o.items").alias("item_count"),
     )
 )
-bronze.write.format("delta").mode("overwrite").saveAsTable(
-    "spark_catalog.default.imp_orders_bronze"
-)
+save(bronze, "imp_orders_bronze")
 
 # Step 2: silver. YOU must remember it depends on bronze, and run it after.
 silver = (
-    spark.read.table("spark_catalog.default.imp_orders_bronze")
+    spark.read.table("unity.i2d.imp_orders_bronze")
     .where("order_total > 0")
     .withColumn("order_date", f.to_date("order_ts"))
 )
-silver.write.format("delta").mode("overwrite").saveAsTable(
-    "spark_catalog.default.imp_orders_silver"
-)
+save(silver, "imp_orders_silver")
 
 # Step 3: gold. YOU must run it last, after silver.
 gold = (
-    spark.read.table("spark_catalog.default.imp_orders_silver")
+    spark.read.table("unity.i2d.imp_orders_silver")
     .groupBy("order_date")
     .agg(
         f.count("*").alias("order_count"),
         f.round(f.sum("order_total"), 2).alias("revenue"),
     )
 )
-gold.write.format("delta").mode("overwrite").saveAsTable(
-    "spark_catalog.default.imp_orders_gold"
-)
+save(gold, "imp_orders_gold")
 
 print("imperative run complete:")
 for t in ("imp_orders_bronze", "imp_orders_silver", "imp_orders_gold"):
-    n = spark.sql(f"SELECT count(*) c FROM spark_catalog.default.{t}").collect()[0]["c"]
-    print(f"  spark_catalog.default.{t}: {n} rows")
+    n = spark.sql(f"SELECT count(*) c FROM unity.i2d.{t}").collect()[0]["c"]
+    print(f"  unity.i2d.{t}: {n} rows")

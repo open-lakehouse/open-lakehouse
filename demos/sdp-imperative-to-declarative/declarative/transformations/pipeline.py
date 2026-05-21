@@ -5,7 +5,8 @@ ordering. SDP infers the DAG from the `spark.read.table(...)` calls:
 dec_orders_bronze → dec_orders_silver → dec_orders_gold, run in that order.
 
 Source: the generated order-event dataset (`data/events/orders_7d.parquet`,
-~8M events). Compare line-for-line with ../imperative_pipeline.py.
+~8M events). Materialized into Unity Catalog under `unity.i2d`. Compare
+line-for-line with ../imperative_pipeline.py.
 """
 
 from pyspark import pipelines as dp
@@ -13,6 +14,13 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as f
 
 spark = SparkSession.active()
+
+# UC OSS's Spark connector asserts location != null and provider != null on
+# createTable; SDP's SQL LOCATION clause is rejected, so each table passes them
+# through `table_properties`. The explicit location makes these UC *external*
+# tables — SDP cannot create UC catalog-managed tables (Delta rejects it).
+# (s3:// — the scheme UC stores; mapped to S3A.)
+_WAREHOUSE = "s3://lakehouse/warehouse/sdp/v2/i2d"
 
 # Declared schemas — SDP analyses each function when it builds the graph, so
 # the parquet reader must not do I/O-based schema inference there. `_EVENTS`
@@ -29,7 +37,16 @@ _BODY = (
 )
 
 
-@dp.materialized_view(name="dec_orders_bronze", comment="Raw order events, body parsed.")
+def _uc(name: str) -> dict:
+    """table_properties for a UC external Delta table."""
+    return {"location": f"{_WAREHOUSE}/{name}", "provider": "delta"}
+
+
+@dp.materialized_view(
+    name="dec_orders_bronze",
+    comment="Raw order events, body parsed.",
+    table_properties=_uc("dec_orders_bronze"),
+)
 def dec_orders_bronze() -> DataFrame:
     return (
         spark.read.schema(_EVENTS).parquet("file:///data/events/orders_7d.parquet")
@@ -46,7 +63,11 @@ def dec_orders_bronze() -> DataFrame:
     )
 
 
-@dp.materialized_view(name="dec_orders_silver", comment="Cleaned, valid orders.")
+@dp.materialized_view(
+    name="dec_orders_silver",
+    comment="Cleaned, valid orders.",
+    table_properties=_uc("dec_orders_silver"),
+)
 def dec_orders_silver() -> DataFrame:
     # Dependency on dec_orders_bronze is inferred from this read — no ordering code.
     return (
@@ -56,7 +77,11 @@ def dec_orders_silver() -> DataFrame:
     )
 
 
-@dp.materialized_view(name="dec_orders_gold", comment="Daily revenue rollup.")
+@dp.materialized_view(
+    name="dec_orders_gold",
+    comment="Daily revenue rollup.",
+    table_properties=_uc("dec_orders_gold"),
+)
 def dec_orders_gold() -> DataFrame:
     return (
         spark.read.table("dec_orders_silver")
