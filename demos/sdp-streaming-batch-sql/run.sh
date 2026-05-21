@@ -10,6 +10,10 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 C=spark-master-41
 PROJ=/tmp/sdp-streaming-batch-sql
 
+# Preflight — the generated event data must be present (seed.py reads it).
+echo "→ preflight"
+bash "$DIR/../preflight.sh"
+
 # spark-pipelines embeds its own Connect server on 15002 — free the port.
 echo "→ stopping the standalone Connect server (port 15002)"
 docker stop spark-connect-41 >/dev/null 2>&1 || true

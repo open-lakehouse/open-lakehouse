@@ -17,12 +17,14 @@ deleted.
 - Spark 4.1 + Connect server: `./lakehouse start all`
 - The imperative script connects via `sc://localhost:15002`; the declarative
   pipeline runs through `spark-pipelines`.
-- Both target `spark_catalog.default` (Delta) — no Unity Catalog, no Kafka, no
-  test data. Synthetic rows via `spark.range`. Distinct table prefixes
+- Both target `spark_catalog.default` (Delta). Distinct table prefixes
   (`imp_orders_*` vs `dec_orders_*`) keep the two versions side by side.
+- **Generated event data** at `data/events/orders_7d.parquet` — both versions
+  read the `order_created` events from it (~300k rows). Generate it with
+  `./lakehouse testdata generate`, then verify:
 
 ```bash
-./lakehouse status --json | jq '.all_healthy'   # expect: true
+bash demos/preflight.sh        # checks the event data is present + populated
 ```
 
 ## Run
@@ -33,18 +35,18 @@ deleted.
 poetry run python demos/sdp-imperative-to-declarative/imperative_pipeline.py
 ```
 
-Expected stdout:
+Expected stdout (counts depend on the generated dataset):
 
 ```
 imperative run complete:
-  spark_catalog.default.imp_orders_bronze: 200 rows
-  spark_catalog.default.imp_orders_silver: ... rows
+  spark_catalog.default.imp_orders_bronze: 299689 rows
+  spark_catalog.default.imp_orders_silver: 285255 rows
   spark_catalog.default.imp_orders_gold: 7 rows
 ```
 
-Note what the script had to spell out: session creation, three explicit
-`write...saveAsTable` calls, and the ordering (bronze before silver before
-gold) enforced only by the order of statements.
+Note what the script had to spell out: session creation, the `body` JSON
+schema, three explicit `write...saveAsTable` calls, and the ordering (bronze
+before silver before gold) enforced only by the order of statements.
 
 ### The declarative version
 
@@ -75,8 +77,9 @@ SDP ran the three flows in dependency order — which it derived itself. The
 ## Expected output
 
 Both versions produce three Delta tables (`imp_orders_*` from the imperative
-script, `dec_orders_*` from SDP): 200 bronze rows → filtered silver → 7-row
-daily gold rollup.
+script, `dec_orders_*` from SDP) over the real order events: ~300k `bronze`
+rows (parsed `order_created` events) → valid-total `silver` → 7-row daily
+`gold` rollup (revenue + order count per day).
 
 The teaching point is the diff, not the data:
 

@@ -14,15 +14,18 @@ SQL you write:
 
 This demo runs both in a single pipeline so you can compare them directly.
 The streaming faucet (`sxb_raw`) ingests a seed Delta table written by
-`seed.py`; the two semantics under study (`sxb_clean`, `sxb_rollup`) are pure
-SQL. No Kafka, no test data.
+`seed.py` from the generated event dataset; the two semantics under study
+(`sxb_clean`, `sxb_rollup`) are pure SQL.
 
 ## Prereqs
 
 - Spark 4.1 + Connect server: `./lakehouse start all`
 - `spark-pipelines` Python deps in the Spark image (`/tmp/pylibs` — see
   `.claude/skills/sdp/unity-catalog.md`).
-- Targets `spark_catalog.default` (Delta). No Unity Catalog, no Kafka.
+- **Generated event data** at `data/events/orders_7d.parquet` — `seed.py` reads
+  the order-lifecycle events from it. Generate with `./lakehouse testdata
+  generate`; `run.sh` runs `demos/preflight.sh` first to confirm it is present.
+- Targets `spark_catalog.default` (Delta). No Kafka.
 
 ## Run
 
@@ -30,10 +33,12 @@ SQL. No Kafka, no test data.
 bash demos/sdp-streaming-batch-sql/run.sh
 ```
 
-`run.sh` stops the standalone Connect server (it shares port 15002 with
-`spark-pipelines`), copies the project into `spark-master-41`, **seeds a
-source Delta table** (`seed.py` writes 300 events to `file:///tmp/sxb-seed`),
-runs the pipeline once, and restarts the Connect server.
+`run.sh` runs the preflight check, stops the standalone Connect server (it
+shares port 15002 with `spark-pipelines`), copies the project into
+`spark-master-41`, **seeds a source Delta table** (`seed.py` reads the
+order-lifecycle events — everything except the high-volume `driver_ping` GPS
+noise — into `file:///tmp/sxb-seed`), runs the pipeline once, and restarts the
+Connect server.
 
 The pipeline has three datasets:
 
@@ -43,10 +48,12 @@ The pipeline has three datasets:
 | `transformations/10_events_clean.sql` | `sxb_clean` | **streaming table** — `FROM STREAM sxb_raw` |
 | `transformations/20_events_by_type.sql` | `sxb_rollup` | **materialized view** — batch aggregate |
 
-Why a seeded Delta table and not a `rate` stream: SDP runs streaming tables
-with a one-shot trigger, so a `rate` source yields zero rows (no wall-clock
-time has elapsed when the run starts). Seeding a real source table keeps the
-demo deterministic — see `seed.py`.
+Why a seeded Delta table rather than a live stream: the SDP run consumes the
+seed with a one-shot trigger, so the source must already hold its rows when
+the run starts. Seeding from the generated parquet keeps the demo
+deterministic — see `seed.py`. (`read_files` / `read_kafka` SQL functions that
+would let a SQL streaming table read a stream directly are Databricks
+extensions, absent from OSS Spark 4.1.)
 
 ## Expected output
 
@@ -63,17 +70,22 @@ Delta tables by storage path rather than by name):
 ```bash
 docker exec spark-master-41 /opt/spark/bin/spark-sql -e \
   "SELECT event_type, event_count
-   FROM delta.\`s3a://lakehouse/warehouse/sdp/sxb_rollup\` ORDER BY event_type;"
+   FROM delta.\`s3a://lakehouse/warehouse/sdp/sxb_rollup\` ORDER BY event_count DESC;"
 ```
 
 ```
-click     100
-purchase  100
-view      100
+kitchen_started   299820
+driver_arrived    299771
+order_ready       299762
+driver_picked_up  299705
+order_created     299689
+delivered         299664
+kitchen_finished  299618
 ```
 
-`sxb_clean` holds the 300 events ingested this run; `sxb_rollup` is their
-batch rollup by type. The teaching point is in the DDL:
+`sxb_clean` holds the ~2.1M order-lifecycle events ingested this run;
+`sxb_rollup` is their batch rollup by event type. The teaching point is in the
+DDL:
 
 | | `sxb_clean` (`CREATE STREAMING TABLE`) | `sxb_rollup` (`CREATE MATERIALIZED VIEW`) |
 |--|--|--|
@@ -98,6 +110,6 @@ Drops the three tables and removes the in-container project and seed.
   run's data is still at the storage path and SDP will not write over it. This
   is a known rough edge of SDP on object storage — see
   `.claude/skills/sdp/troubleshooting.md`.
-- `read_files` / `read_kafka` table functions are Databricks extensions and
-  are **not** available in OSS Spark 4.1, which is why the streaming source
-  here is a Python `spark.readStream` dataset rather than a SQL TVF.
+- The streaming source is a Python `@dp.table` (`spark.readStream`) because a
+  SQL streaming table needs its raw source defined in Python — `read_files` /
+  `read_kafka` SQL functions are Databricks-only.

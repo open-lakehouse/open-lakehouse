@@ -99,11 +99,23 @@ Python callables need a UDF, which kills predicate pushdown. This is the
 
 ## Deduplication
 
-```python
-@dp.materialized_view(name="orders_deduped")
-def orders_deduped() -> DataFrame:
-    return spark.read.table("orders_bronze").dropDuplicates(["order_id"])
+Dedup in a **SQL** transformation — a `row_number()` window keeps one row per
+key:
+
+```sql
+CREATE MATERIALIZED VIEW orders_deduped AS
+SELECT * EXCEPT (_rn) FROM (
+  SELECT *, row_number() OVER (PARTITION BY order_id ORDER BY event_ts DESC) AS _rn
+  FROM orders_bronze
+) WHERE _rn = 1;
 ```
+
+Do **not** use `DataFrame.dropDuplicates(["order_id"])` inside a *Python*
+pipeline function. The column-subset form eagerly resolves the upstream
+DataFrame's schema against the live catalog — but an upstream SDP dataset is
+not a catalog table during graph construction, so registration fails with
+`[TABLE_OR_VIEW_NOT_FOUND]`. Keep dedup in SQL, or do it downstream of
+materialization. (Verified on Spark 4.1 + Connect, 2026-05-21.)
 
 For streaming dedup, set a watermark first so state is bounded — see
 [streaming.md](streaming.md).
