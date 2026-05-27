@@ -24,11 +24,12 @@ Every `demos/<name>/README.md` has these five sections, in order:
 |------|--------|-----------|---------------|
 | [`sdp-medallion/`](sdp-medallion/) | **Built** | `spark-pipelines` | Bronze → Silver → Gold via Spark Declarative Pipelines, materialized as Delta tables in Unity Catalog OSS. |
 | [`unity-catalog-multi-engine/`](unity-catalog-multi-engine/) | Placeholder | Spark Connect + DuckDB | One catalog, multiple engines reading the same table. |
-| [`realtime-mode/`](realtime-mode/) | Placeholder | Spark Connect (Structured Streaming) | Kafka → Delta streaming with watermarked dedup over Connect. |
+| [`realtime-mode/`](realtime-mode/) | **Built** | `spark-submit` (Structured Streaming) | Kafka → Kafka stateless guardrail in Real-Time Mode (`trigger(realTime=...)`), dynamic topic routing to `-allowed` / `-quarantine`. |
 | [`local-mode-spark/`](local-mode-spark/) | **Not yet implemented** | Local (no cluster) | In-process SparkSession for offline / laptop-only demos. Backs the `--spark-local` flag. |
 
-`sdp-medallion` is a working demo with a full README. The other three are
-placeholders — content is added demo-by-demo, never fabricated. To scaffold:
+`sdp-medallion` and `realtime-mode` are working demos with full READMEs.
+`unity-catalog-multi-engine` and `local-mode-spark` are placeholders —
+content is added demo-by-demo, never fabricated. To scaffold:
 
 ```bash
 cp -r demos/_template demos/<name>

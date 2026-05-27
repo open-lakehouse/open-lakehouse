@@ -43,6 +43,16 @@ JAR_LIST=(
     # register in UC (catalog `unity`). client jar is its runtime dep.
     "unitycatalog-spark_2.13-0.3.0.jar|https://repo1.maven.org/maven2/io/unitycatalog/unitycatalog-spark_2.13/0.3.0/unitycatalog-spark_2.13-0.3.0.jar|20000"
     "unitycatalog-client-0.3.0.jar|https://repo1.maven.org/maven2/io/unitycatalog/unitycatalog-client/0.3.0/unitycatalog-client-0.3.0.jar|250000"
+    # Spark SQL Kafka connector — needed by any Structured Streaming job that
+    # reads/writes Kafka (the realtime-mode demo, any streaming SDP source).
+    # `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0`
+    # is the textbook path but fails on the stock apache/spark:4.1.0 image —
+    # Ivy can't write to user.home=/nonexistent. Pre-downloading here lets
+    # spark-submit use --jars instead.
+    "spark-sql-kafka-0-10_2.13-4.1.0.jar|https://repo1.maven.org/maven2/org/apache/spark/spark-sql-kafka-0-10_2.13/4.1.0/spark-sql-kafka-0-10_2.13-4.1.0.jar|400000"
+    "spark-token-provider-kafka-0-10_2.13-4.1.0.jar|https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.13/4.1.0/spark-token-provider-kafka-0-10_2.13-4.1.0.jar|50000"
+    "kafka-clients-3.9.0.jar|https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.9.0/kafka-clients-3.9.0.jar|8000000"
+    "commons-pool2-2.12.0.jar|https://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.12.0/commons-pool2-2.12.0.jar|100000"
 )
 
 # Get file size (cross-platform)

@@ -26,10 +26,41 @@ That's it. No `--master`, no JVM driver in your process, no `spark-submit`. The 
 - **Heavy custom Scala/Java jobs** with their own JAR you want to spark-submit directly. Use the master container in that case:
 
 ```bash
-docker exec spark-master-41 /opt/spark/bin/spark-submit /scripts/<your-job>.py
+docker exec -u root spark-master-41 /opt/spark/bin/spark-submit /scripts/<your-job>.py
 ```
 
 Mounts: `./scripts/` → `/scripts/`, `./jars/` → `/opt/spark/jars-extra/`.
+
+### spark-submit on this stack — three gotchas
+
+The stock `apache/spark:4.1.0` image has rough edges that bite the first time
+you reach for spark-submit on this cluster. All three are environmental, not
+Spark bugs:
+
+1. **Run with `-u root`.** The default `spark` user has `home=/nonexistent`
+   in `/etc/passwd`, and `user.home` is hardcoded by the JVM at start (env
+   `HOME=` doesn't help). Ivy can't write its resolution cache, the
+   checkpoint dir can't be created, the SDP `pylibs` aren't on the path.
+   `docker exec -u root spark-master-41 …` makes all of that go away.
+2. **`--packages` doesn't work; use `--jars`.** Same `user.home=/nonexistent`
+   reason — Ivy fails creating `/nonexistent/.ivy2.5.2/cache/resolved-…-1.0.xml`.
+   `spark.jars.ivy=/root/.ivy2` and `--driver-java-options -Duser.home=/root`
+   are both ignored. Pre-download required jars to `jars/`
+   (`scripts/tools/download-jars.sh`) and pass `--jars
+   /opt/spark/jars-extra/foo.jar,/opt/spark/jars-extra/bar.jar`.
+3. **Bootstrap services as `localhost:HOSTPORT`, not service names.**
+   Spark, Kafka, Postgres, SeaweedFS, and Unity Catalog all run on the host
+   network. From inside `spark-master-41`, `kafka:9092` does **not** resolve
+   — it's `localhost:9092`. Same for `8081` (UC), `8333` (SeaweedFS), `5432`
+   (Postgres). Pass `-e KAFKA_BOOTSTRAP_SERVERS=localhost:9092` etc. on the
+   `docker exec`.
+
+Loud-but-ignorable on startup: `ClassNotFoundException` for
+`IcebergSparkSessionExtensions`, `DeltaSparkSessionExtension`, and
+`S3AFileSystem` print because `spark-defaults.conf` lists them as extensions
+but the relevant jars aren't on the submit classpath. If your job needs them,
+add the iceberg / delta / hadoop-aws jars to `--jars`. If it doesn't (e.g. a
+pure Kafka→Kafka stream), ignore them — the job still starts.
 
 ## Imports — house style
 
