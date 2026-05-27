@@ -4,9 +4,9 @@
 
 ## Purpose
 
-Demonstrates Structured Streaming's `trigger(realTime=...)` mode on OSS Spark 4.1: a single stateless query reads Ethereum-style block events from one Kafka topic, applies guardrail checks (gas limits, anomalous transaction counts, PII / credential leakage in `extra_data`), and routes each record to either an `-allowed` or `-quarantine` output topic via the `topic` column on the write — no `forEachBatch`, no double-writes.
+Demonstrates Real-Time Mode (RTM) on OSS Spark 4.1.0: a single stateless query reads Ethereum-style block events from one Kafka topic, applies guardrail checks (gas limits, anomalous transaction counts, PII / credential leakage in `extra_data`), and routes each record to either an `-allowed` or `-quarantine` output topic via the `topic` column on the write — no `forEachBatch`, no double-writes.
 
-Real-Time Mode here means `outputMode("update")` + `trigger(realTime="5 minutes")`. Records are processed as they arrive (~100ms end-to-end); the 5-minute interval is the checkpoint cadence, not the latency.
+RTM here means `Trigger.RealTime("5 seconds")` + `outputMode("update")`. The Scala `Trigger.RealTime(...)` API landed in 4.1.0 ([SPARK-52330 SPIP](https://issues.apache.org/jira/browse/SPARK-52330), [SPARK-53736](https://issues.apache.org/jira/browse/SPARK-53736)) as `@Experimental`. **There is no native PySpark `trigger(realTime=...)` kwarg in 4.1.0** — `rtm_pipeline.py` reaches through the JVM (`spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(...)`) to construct the trigger, then drives `start()` through the Java `DataStreamWriter`. Set `USE_REALTIME=0` to fall back to `trigger(processingTime="0 seconds")` if you want pure-Python and don't need single-digit-ms latency.
 
 ## Prereqs
 

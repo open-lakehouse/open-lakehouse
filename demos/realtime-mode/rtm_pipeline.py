@@ -5,9 +5,12 @@ checks (gas limits, transaction count anomalies, PII / credential patterns
 in the free-text `extra_data` field), and dynamically routes each record
 to either an `-allowed` or `-quarantine` output topic.
 
-The point of this script is to exercise Structured Streaming Real-Time Mode
-on OSS Spark 4.1: ~100ms end-to-end latency, `outputMode("update")`, and a
-single writer driving multiple Kafka topics via the `topic` column.
+OSS Spark 4.1.0 ships `Trigger.RealTime(...)` as an `@Experimental` Scala API
+(SPARK-52330 SPIP, SPARK-53736 stateless support landed in 4.1.0). There is
+no native PySpark `trigger(realTime=...)` kwarg yet, so we reach through to
+the JVM with `spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(...)`
+and call `writeStream._jwriter.trigger(...)`. Required output mode is
+`update`; Kafka sink + stateless ops are on the OSS RTM allowlist.
 
 Submit with spark-submit inside the spark-master-41 container:
 
@@ -15,15 +18,17 @@ Submit with spark-submit inside the spark-master-41 container:
         --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0 \\
         /demos/realtime-mode/rtm_pipeline.py
 
-Configuration is read from environment variables (set on the docker exec
-command or in the Spark master container's env):
+Configuration is read from environment variables:
 
     KAFKA_BOOTSTRAP_SERVERS  default: kafka:9092
     INPUT_TOPIC              default: ethereum-blocks
     OUTPUT_TOPIC             default: ethereum-validated
     CHECKPOINT_DIR           default: /opt/spark-data/checkpoints/rtm-realtime-mode
     SHUFFLE_PARTITIONS       default: 8
-    RTM_TRIGGER_INTERVAL     default: 5 minutes
+    RTM_TRIGGER_INTERVAL     default: 5 seconds
+    USE_REALTIME             default: 1 (set 0 to fall back to pure-Python
+                              trigger(processingTime="0 seconds") — useful
+                              if RTM is unavailable on the running cluster)
 """
 
 from __future__ import annotations
@@ -48,7 +53,8 @@ CHECKPOINT_DIR = os.environ.get(
     "CHECKPOINT_DIR", "/opt/spark-data/checkpoints/rtm-realtime-mode"
 )
 SHUFFLE_PARTITIONS = os.environ.get("SHUFFLE_PARTITIONS", "8")
-RTM_TRIGGER_INTERVAL = os.environ.get("RTM_TRIGGER_INTERVAL", "5 minutes")
+RTM_TRIGGER_INTERVAL = os.environ.get("RTM_TRIGGER_INTERVAL", "5 seconds")
+USE_REALTIME = os.environ.get("USE_REALTIME", "1") == "1"
 
 
 BLOCK_SCHEMA = StructType(
@@ -214,22 +220,42 @@ def main() -> int:
     print(f"output topic prefix : {OUTPUT_TOPIC} (-allowed, -quarantine)")
     print(f"bootstrap servers   : {KAFKA_BOOTSTRAP_SERVERS}")
     print(f"checkpoint dir      : {CHECKPOINT_DIR}")
-    print(f"trigger interval    : realTime='{RTM_TRIGGER_INTERVAL}'")
+    print(
+        "trigger             : "
+        + (
+            f"Trigger.RealTime('{RTM_TRIGGER_INTERVAL}') via JVM bridge"
+            if USE_REALTIME
+            else "processingTime='0 seconds' (RTM disabled)"
+        )
+    )
 
     output = build_pipeline(spark)
 
-    query = (
+    writer = (
         output.writeStream.format("kafka")
         .option("kafka.bootstrap.servers", KAFKA_BOOTSTRAP_SERVERS)
         .option("checkpointLocation", CHECKPOINT_DIR)
         .option("queryName", "rtm-realtime-mode")
         .outputMode("update")
-        .trigger(realTime=RTM_TRIGGER_INTERVAL)
-        .start()
     )
 
-    print(f"streaming query started: id={query.id} name={query.name}")
-    query.awaitTermination()
+    if USE_REALTIME:
+        # OSS Spark 4.1.0 — no native PySpark trigger(realTime=...) kwarg.
+        # Reach into the JVM for Trigger.RealTime and apply it on the
+        # underlying Java DataStreamWriter, then start through the Java side
+        # too (the Python writer's _jwriter is now configured).
+        jvm = spark._jvm
+        rt_trigger = jvm.org.apache.spark.sql.streaming.Trigger.RealTime(
+            RTM_TRIGGER_INTERVAL
+        )
+        j_writer = writer._jwriter.trigger(rt_trigger)
+        j_query = j_writer.start()
+        print(f"streaming query started: id={j_query.id()} name={j_query.name()}")
+        j_query.awaitTermination()
+    else:
+        query = writer.trigger(processingTime="0 seconds").start()
+        print(f"streaming query started: id={query.id} name={query.name}")
+        query.awaitTermination()
     return 0
 
 
