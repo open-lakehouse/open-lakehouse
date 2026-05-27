@@ -9,7 +9,7 @@ OSS Spark 4.1.0 ships `Trigger.RealTime(...)` as an `@Experimental` Scala API
 (SPARK-52330 SPIP, SPARK-53736 stateless support landed in 4.1.0). There is
 no native PySpark `trigger(realTime=...)` kwarg yet, so we reach through to
 the JVM with `spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(...)`
-and call `writeStream._jwriter.trigger(...)`. Required output mode is
+and call `writeStream._jwrite.trigger(...)`. Required output mode is
 `update`; Kafka sink + stateless ops are on the OSS RTM allowlist.
 
 Submit with spark-submit inside the spark-master-41 container:
@@ -238,12 +238,12 @@ def main() -> int:
         # OSS Spark 4.1.0 — no native PySpark trigger(realTime=...) kwarg.
         # Reach into the JVM for Trigger.RealTime and apply it on the
         # underlying Java DataStreamWriter, then start through the Java side
-        # too (the Python writer's _jwriter is now configured).
+        # too (the Python writer's _jwrite is now configured).
         jvm = spark._jvm
         rt_trigger = jvm.org.apache.spark.sql.streaming.Trigger.RealTime(
             RTM_TRIGGER_INTERVAL
         )
-        j_writer = writer._jwriter.trigger(rt_trigger)
+        j_writer = writer._jwrite.trigger(rt_trigger)
         j_query = j_writer.start()
         print(f"streaming query started: id={j_query.id()} name={j_query.name()}")
         j_query.awaitTermination()
