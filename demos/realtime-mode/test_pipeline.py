@@ -21,7 +21,6 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as f
 from pyspark.sql.types import LongType, StringType, StructField, StructType
 
-
 # Patterns must mirror rtm_pipeline.detect_sensitive_data() exactly.
 EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")

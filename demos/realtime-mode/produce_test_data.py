@@ -25,7 +25,6 @@ import time
 
 from kafka import KafkaProducer
 
-
 BOOTSTRAP = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 TOPIC = os.environ.get("KAFKA_TOPIC", "ethereum-blocks")
 

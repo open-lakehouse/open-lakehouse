@@ -45,7 +45,6 @@ from pyspark.sql.types import (
     StructType,
 )
 
-
 KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 INPUT_TOPIC = os.environ.get("INPUT_TOPIC", "ethereum-blocks")
 OUTPUT_TOPIC = os.environ.get("OUTPUT_TOPIC", "ethereum-validated")
