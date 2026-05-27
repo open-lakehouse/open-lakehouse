@@ -1,0 +1,10 @@
+name: declarative-medallion
+# Materialize into Unity Catalog. SDP does not create catalogs or schemas, so
+# `unity.i2d` must already exist (the README's prereqs create it). Each table
+# also needs location+provider in table_properties — see transformations/.
+catalog: unity
+schema: i2d
+storage: file:///tmp/declarative-medallion-storage
+libraries:
+  - glob:
+      include: transformations/**

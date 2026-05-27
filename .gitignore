@@ -70,6 +70,9 @@ work/
 mlruns/
 mlartifacts/
 
+# Generated test data (./lakehouse testdata generate — can be multi-GB)
+/data/
+
 # ─── Terraform ──────────────────────────────────────────────────────────
 # Real tfvars contain credentials — only `.example` is tracked.
 **/*.tfvars
