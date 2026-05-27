@@ -18,7 +18,9 @@ from pyspark.sql import functions as f
 
 # YOU manage the session.
 remote = os.environ.get("LAKEHOUSE_SPARK_REMOTE", "sc://localhost:15002")
-spark = SparkSession.builder.remote(remote).appName("imperative-medallion").getOrCreate()
+spark = (
+    SparkSession.builder.remote(remote).appName("imperative-medallion").getOrCreate()
+)
 
 # Schema of the JSON `body` column in the raw event feed.
 BODY = (

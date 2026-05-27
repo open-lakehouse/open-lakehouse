@@ -49,7 +49,8 @@ def _uc(name: str) -> dict:
 )
 def dec_orders_bronze() -> DataFrame:
     return (
-        spark.read.schema(_EVENTS).parquet("file:///data/events/orders_7d.parquet")
+        spark.read.schema(_EVENTS)
+        .parquet("file:///data/events/orders_7d.parquet")
         .where("event_type = 'order_created'")
         .withColumn("o", f.from_json("body", _BODY))
         .select(
