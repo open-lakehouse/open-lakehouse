@@ -84,9 +84,7 @@ def detect_sensitive_data(col_name: str):
             f.lit("CREDENTIAL_AWS_KEY"),
         )
         .when(
-            f.col(col_name).rlike(
-                r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"
-            ),
+            f.col(col_name).rlike(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),
             f.lit("CREDENTIAL_JWT"),
         )
         .when(
@@ -161,9 +159,7 @@ def build_pipeline(spark: SparkSession):
     enriched = (
         validated.withColumn(
             "validation_reasons",
-            f.expr(
-                f"filter(array({','.join(reason_columns)}), x -> x is not null)"
-            ),
+            f.expr(f"filter(array({','.join(reason_columns)}), x -> x is not null)"),
         )
         .withColumn("is_quarantined", f.size(f.col("validation_reasons")) > 0)
         .withColumn(
