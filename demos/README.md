@@ -27,11 +27,12 @@ Every `demos/<name>/README.md` has these five sections, in order:
 | [`sdp-streaming-batch-sql/`](sdp-streaming-batch-sql/) | **Built** | `spark-pipelines` | `CREATE STREAMING TABLE` vs `CREATE MATERIALIZED VIEW` — streaming vs batch semantics, in SQL. |
 | [`sdp-cli-lifecycle/`](sdp-cli-lifecycle/) | **Built** | `spark-pipelines` | The `spark-pipelines` developer loop as shell commands — `init`, `dry-run`, `run`. |
 | [`unity-catalog-multi-engine/`](unity-catalog-multi-engine/) | Placeholder | Spark Connect + DuckDB | One catalog, multiple engines reading the same table. |
-| [`realtime-mode/`](realtime-mode/) | Placeholder | Spark Connect (Structured Streaming) | Kafka → Delta streaming with watermarked dedup over Connect. |
+| [`realtime-mode/`](realtime-mode/) | **Built** | `spark-submit` (Structured Streaming) | Kafka → Kafka stateless guardrail in Real-Time Mode (`trigger(realTime=...)`), dynamic topic routing to `-allowed` / `-quarantine`. |
 | [`local-mode-spark/`](local-mode-spark/) | **Not yet implemented** | Local (no cluster) | In-process SparkSession for offline / laptop-only demos. Backs the `--spark-local` flag. |
 
-The four SDP demos are working demos with full READMEs. The other three are
-placeholders — content is added demo-by-demo, never fabricated. To scaffold:
+The four SDP demos and `realtime-mode` are working demos with full READMEs.
+`unity-catalog-multi-engine` and `local-mode-spark` are placeholders —
+content is added demo-by-demo, never fabricated. To scaffold:
 
 ```bash
 cp -r demos/_template demos/<name>
