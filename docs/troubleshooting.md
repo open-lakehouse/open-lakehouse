@@ -236,6 +236,23 @@ grep "fs.s3a" config/spark/spark-defaults.conf
 # spark.hadoop.fs.s3a.path.style.access=true
 ```
 
+### `spark-submit` Fails Before the Job Starts
+
+Three image-level gotchas with the stock `apache/spark:4.1.0` master that
+trip every first-time `spark-submit` on this stack:
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| `java.io.FileNotFoundException: /nonexistent/.ivy2.5.2/cache/resolved-…-1.0.xml` after `--packages …` | The `spark` user has `home=/nonexistent` and Ivy can't write there. `spark.jars.ivy` and `-Duser.home=/root` are ignored. | Pre-download the package's jars (see `scripts/tools/download-jars.sh` — the Kafka SQL connector + deps are pinned there) and use `--jars /opt/spark/jars-extra/…` instead of `--packages`. |
+| Checkpoint dir / Ivy cache / `pylibs` write fails with `Permission denied` | Same `home=/nonexistent`. | Run with `docker exec -u root spark-master-41 …`. |
+| Stream job dies with `No resolvable bootstrap urls given in bootstrap.servers` | The job uses `kafka:9092` but Spark and Kafka are on the host network, not a Compose network. | Pass `-e KAFKA_BOOTSTRAP_SERVERS=localhost:9092` on the `docker exec` (Postgres / UC / SeaweedFS are likewise `localhost:5432 / 8081 / 8333`). |
+
+Loud-but-ignorable on submit: `ClassNotFoundException` for
+`IcebergSparkSessionExtensions`, `DeltaSparkSessionExtension`, and
+`S3AFileSystem` print because `spark-defaults.conf` references them but the
+relevant jars aren't on the submit classpath. The job still starts; if you
+genuinely need them, add the iceberg / delta / hadoop-aws jars to `--jars`.
+
 ## Kafka Issues
 
 ### Broker Not Available

@@ -26,6 +26,30 @@ docker exec -it kafka kafka-console-consumer --topic orders \
   --from-beginning --bootstrap-server localhost:9092
 ```
 
+## Connector jar + bootstrap on this stack
+
+Spark's Kafka SQL connector is **not bundled** in `apache/spark:4.1.0`. The
+canonical `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0`
+fails on this image because Ivy can't write to `/nonexistent` (the `spark`
+user's `home` per `/etc/passwd`). The fix is to pre-download:
+
+| File | Used by |
+|------|---------|
+| `spark-sql-kafka-0-10_2.13-4.1.0.jar` | Spark SQL Kafka source/sink |
+| `spark-token-provider-kafka-0-10_2.13-4.1.0.jar` | runtime dep |
+| `kafka-clients-3.9.0.jar` | runtime dep |
+| `commons-pool2-2.12.0.jar` | runtime dep |
+
+`./lakehouse setup` (via `scripts/tools/download-jars.sh`) puts them in
+`jars/` (mounted at `/opt/spark/jars-extra/`). Pass them via `--jars` on
+spark-submit. Connect-mode jobs pick them up from `spark.jars` in
+`spark-defaults.conf` if you add them there.
+
+The broker is `localhost:9092` from inside `spark-master-41` — host network,
+not the docker-compose default of `kafka:9092`. Same applies to producers
+running on the host. Spark Kafka source code samples in this skill use
+`kafka:9092` in places — substitute `localhost:9092` for this stack.
+
 ## Spark Structured Streaming reader
 
 ```python

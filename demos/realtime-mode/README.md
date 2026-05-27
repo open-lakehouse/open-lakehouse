@@ -11,10 +11,25 @@ RTM here means `Trigger.RealTime("5 seconds")` + `outputMode("update")`. The Sca
 ## Prereqs
 
 - Spark 4.1 + Kafka running: `./lakehouse start all`
-- The Spark Kafka connector JAR is available on the cluster. If the master image is the stock `apache/spark:4.1.0`, the simplest path is to let `spark-submit --packages` pull it on first run (used in the Run section below).
-- Demo deps on the host for the producer: `poetry install` (kafka-python ships in the dev/test extras).
+- The 4 Spark-Kafka-connector jars in `jars/` (`./lakehouse setup` puts them
+  there; `--packages` does **not** work on the stock `apache/spark:4.1.0`
+  image, see "Notes" below).
+- Demo deps on the host for the producer: `poetry install` (kafka-python ships
+  in the dev/test extras).
 
-Transport: this demo does **not** use the standalone Connect server. It submits the streaming job into `spark-master-41` via `spark-submit` (long-running streams + Connect don't compose cleanly). Verification reads the output topics with `kafka-console-consumer` inside the Kafka container.
+Transport: this demo does **not** use the standalone Connect server. It
+submits the streaming job into `spark-master-41` via `spark-submit` (long-
+running streams + Connect don't compose cleanly). Verification reads the
+output topics with `kafka-console-consumer` inside the Kafka container.
+
+The stack runs Spark + Kafka on the **host network**, so the Kafka bootstrap
+is `localhost:9092` from inside `spark-master-41` — *not* `kafka:9092`. The
+producer and the streaming job both read `KAFKA_BOOTSTRAP_SERVERS`; pass it
+explicitly per the Run section.
+
+`spark-submit` (and any `spark-pipelines run`) must run as `-u root` — the
+default `spark` user has `home=/nonexistent` and Ivy / checkpoint dirs trip
+on it.
 
 Verify the stack is up:
 
@@ -63,14 +78,22 @@ Created topic ethereum-validated-quarantine.
 
 ```bash
 # Step 3: Submit the RTM streaming job into the Spark master container.
-# Detached so the producer can run after; logs go to docker.
-docker exec -d spark-master-41 /opt/spark/bin/spark-submit \
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0 \
-  --conf spark.sql.shuffle.partitions=8 \
-  /demos/realtime-mode/rtm_pipeline.py
+# Copy the pipeline in, then spark-submit it with the pre-downloaded Kafka
+# connector jars and the right Kafka bootstrap for this stack's host network.
+docker cp demos/realtime-mode/rtm_pipeline.py spark-master-41:/tmp/rtm_pipeline.py
 
-# Tail the master logs until you see the query started message.
-docker logs -f spark-master-41 2>&1 | grep -m1 "streaming query started"
+KJARS='/opt/spark/jars-extra/spark-sql-kafka-0-10_2.13-4.1.0.jar'
+KJARS+=',/opt/spark/jars-extra/spark-token-provider-kafka-0-10_2.13-4.1.0.jar'
+KJARS+=',/opt/spark/jars-extra/kafka-clients-3.9.0.jar'
+KJARS+=',/opt/spark/jars-extra/commons-pool2-2.12.0.jar'
+
+docker exec -u root -d -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 spark-master-41 \
+  sh -c "/opt/spark/bin/spark-submit --jars '$KJARS' \
+    --conf spark.sql.shuffle.partitions=8 \
+    /tmp/rtm_pipeline.py >/tmp/rtm.log 2>&1"
+
+# Tail the spark-submit log until you see the query started message.
+docker exec spark-master-41 sh -c 'tail -f /tmp/rtm.log' 2>&1 | grep -m1 "streaming query started"
 ```
 
 Expected stdout snippet:
@@ -141,3 +164,23 @@ bash demos/realtime-mode/teardown.sh
 ```
 
 This stops the streaming query (by killing the spark-submit JVM inside `spark-master-41`), deletes the three Kafka topics, and removes the checkpoint directory.
+
+## Notes — stack-specific gotchas
+
+- **`--packages` is broken on the stock `apache/spark:4.1.0` image.** The
+  default `spark` user has `home=/nonexistent`, and Ivy fails creating
+  `/nonexistent/.ivy2.5.2/cache/resolved-…-1.0.xml` even with the dir
+  pre-made and chmod-ed. `spark.jars.ivy` is ignored. Pre-downloading the
+  Kafka jars (done by `./lakehouse setup` →
+  `scripts/tools/download-jars.sh`) and using `--jars` sidesteps Ivy
+  entirely. The Step 3 command above uses this approach.
+- **Bootstrap is `localhost:9092`, not `kafka:9092`** — Spark and Kafka run
+  on the host network, so service-name resolution doesn't work. Both the
+  Spark job and the host-side producer read `KAFKA_BOOTSTRAP_SERVERS`.
+- **Submit as `-u root`** — same `home=/nonexistent` reason. Without it,
+  spark-submit can't write to the checkpoint dir or Ivy cache.
+- **Loud-but-ignorable warnings on submit.** `ClassNotFoundException` for
+  `IcebergSparkSessionExtensions`, `DeltaSparkSessionExtension`, and
+  `S3AFileSystem` print at startup — Spark loads them eagerly because
+  they're set in `spark-defaults.conf`, but this job doesn't need them.
+  The streaming query starts fine afterward.
