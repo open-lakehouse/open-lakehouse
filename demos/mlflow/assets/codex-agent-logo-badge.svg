@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="320" height="88" viewBox="0 0 320 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="2" width="316" height="84" rx="18" fill="#FFFDF7" stroke="#FDE68A" stroke-width="2"/>
+  <circle cx="42" cy="44" r="20" fill="#F59E0B"/>
+  <path d="M34 44L40 50L50 38" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="74" y="39" fill="#7C2D12" font-family="Inter, Avenir Next, Segoe UI, sans-serif" font-size="18" font-weight="700">Codex</text>
+  <text x="74" y="59" fill="#9A3412" font-family="Inter, Avenir Next, Segoe UI, sans-serif" font-size="18" font-weight="600">Agent</text>
+  <text x="150" y="55" fill="#B45309" font-family="Inter, Avenir Next, Segoe UI, sans-serif" font-size="26" font-weight="700">&lt;/&gt;</text>
+</svg>
