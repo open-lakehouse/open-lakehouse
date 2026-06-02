@@ -14,7 +14,7 @@ This repo is the demo-focused sibling of the upstream [lakehouse-stack](https://
 | Orchestration | Apache Airflow | 3.1.6 |
 | Open table formats | Apache Iceberg / Delta Lake | 1.10 / 4.0.1 |
 | Catalog | Unity Catalog OSS | 0.4.x |
-| Experiment tracking | MLflow | 3.1 |
+| Experiment tracking | MLflow | 3.12 |
 | Object store | SeaweedFS (S3-compatible) | — |
 | Metastore | PostgreSQL | 16 |
 

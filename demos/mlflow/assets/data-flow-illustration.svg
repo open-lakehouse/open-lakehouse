@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .title { font: 700 44px 'Inter', 'Avenir Next', 'Segoe UI', sans-serif; fill: #1F2937; }
+      .subtitle { font: 500 20px 'Inter', 'Avenir Next', 'Segoe UI', sans-serif; fill: #4B5563; }
+      .nodeTitle { font: 700 22px 'Inter', 'Avenir Next', 'Segoe UI', sans-serif; fill: #111827; }
+      .nodeText { font: 500 16px 'Inter', 'Avenir Next', 'Segoe UI', sans-serif; fill: #374151; }
+      .small { font: 600 14px 'Inter', 'Avenir Next', 'Segoe UI', sans-serif; fill: #4B5563; }
+    </style>
+    <marker id="arrow" markerWidth="14" markerHeight="14" refX="9" refY="7" orient="auto">
+      <path d="M1 1L11 7L1 13V1Z" fill="#6B7280"/>
+    </marker>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="900" fill="#F7FAFC"/>
+  <circle cx="118" cy="110" r="78" fill="#E0F2FE"/>
+  <circle cx="1480" cy="780" r="86" fill="#DCFCE7"/>
+  <circle cx="1510" cy="150" r="62" fill="#FEF3C7"/>
+
+  <text x="70" y="84" class="title">MLflow Demo - High-Level Data Flow</text>
+  <text x="70" y="118" class="subtitle">Natural Language -> Spark SQL -> Execute on Delta -> Render -> Evaluate in MLflow</text>
+
+  <!-- Row 1 -->
+  <g filter="url(#softShadow)">
+    <rect x="90" y="190" rx="20" ry="20" width="280" height="120" fill="#FECACA" stroke="#F87171" stroke-width="3"/>
+    <rect x="440" y="190" rx="20" ry="20" width="320" height="120" fill="#DBEAFE" stroke="#60A5FA" stroke-width="3"/>
+    <rect x="830" y="190" rx="20" ry="20" width="320" height="120" fill="#DDD6FE" stroke="#8B5CF6" stroke-width="3"/>
+    <rect x="1220" y="190" rx="20" ry="20" width="280" height="120" fill="#FDE68A" stroke="#F59E0B" stroke-width="3"/>
+  </g>
+
+  <text x="132" y="235" class="nodeTitle">User Question</text>
+  <text x="132" y="262" class="nodeText">Natural language prompt</text>
+
+  <text x="492" y="235" class="nodeTitle">Streamlit UI</text>
+  <text x="492" y="262" class="nodeText">Chat input and interaction</text>
+
+  <text x="882" y="235" class="nodeTitle">Agent Layer</text>
+  <text x="882" y="262" class="nodeText">Codex generates Spark SQL</text>
+
+  <text x="1262" y="235" class="nodeTitle">SQL Safety</text>
+  <text x="1262" y="262" class="nodeText">Validate + guardrails</text>
+
+  <!-- Row 2 -->
+  <g filter="url(#softShadow)">
+    <rect x="1220" y="410" rx="20" ry="20" width="280" height="120" fill="#CFFAFE" stroke="#06B6D4" stroke-width="3"/>
+    <rect x="830" y="410" rx="20" ry="20" width="320" height="120" fill="#BBF7D0" stroke="#22C55E" stroke-width="3"/>
+    <rect x="440" y="410" rx="20" ry="20" width="320" height="120" fill="#FDE68A" stroke="#EAB308" stroke-width="3"/>
+    <rect x="90" y="410" rx="20" ry="20" width="280" height="120" fill="#E5E7EB" stroke="#9CA3AF" stroke-width="3"/>
+  </g>
+
+  <text x="1256" y="455" class="nodeTitle">Spark Executor</text>
+  <text x="1256" y="482" class="nodeText">Run Spark SQL query</text>
+
+  <text x="888" y="455" class="nodeTitle">Delta Tables</text>
+  <text x="888" y="482" class="nodeText">Existing business data</text>
+
+  <text x="494" y="455" class="nodeTitle">Result Formatter</text>
+  <text x="494" y="482" class="nodeText">DataFrame -> table/chart</text>
+
+  <text x="130" y="455" class="nodeTitle">Rendered Output</text>
+  <text x="130" y="482" class="nodeText">Shown back in Streamlit</text>
+
+  <!-- Bottom -->
+  <g filter="url(#softShadow)">
+    <rect x="570" y="650" rx="22" ry="22" width="460" height="130" fill="#D1FAE5" stroke="#10B981" stroke-width="3"/>
+  </g>
+  <text x="640" y="705" class="nodeTitle">MLflow Evaluation</text>
+  <text x="640" y="734" class="nodeText">Score query outcomes and agent quality</text>
+
+  <!-- Arrows row 1 -->
+  <line x1="370" y1="250" x2="440" y2="250" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+  <line x1="760" y1="250" x2="830" y2="250" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+  <line x1="1150" y1="250" x2="1220" y2="250" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- Turn down -->
+  <path d="M1360 310V410" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- Arrows row 2 (right to left) -->
+  <line x1="1220" y1="470" x2="1150" y2="470" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+  <line x1="830" y1="470" x2="760" y2="470" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+  <line x1="440" y1="470" x2="370" y2="470" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- To MLflow -->
+  <path d="M230 530V610H800V650" stroke="#6B7280" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- Labels -->
+  <text x="1265" y="345" class="small">validated SQL</text>
+  <text x="980" y="560" class="small">query + result metadata</text>
+  <text x="300" y="600" class="small">response payload + execution context</text>
+</svg>

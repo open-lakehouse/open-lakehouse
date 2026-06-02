@@ -15,7 +15,7 @@ services:
     build:
       context: .
       dockerfile: docker/mlflow/Dockerfile
-    image: lakehouse-mlflow:3.1.0
+    image: lakehouse-mlflow:3.12.0
     container_name: mlflow-server
     ports:
       - "5000:5000"
@@ -71,7 +71,7 @@ services:
     command: >
       bash -c "
         mkdir -p /opt/spark-data/logs &&
-        pip install --quiet mlflow>=3.1 openai &&
+        pip install --quiet mlflow>=3.12 openai &&
         echo 'MLflow agent container ready. Using local OSS models via Ollama.' &&
         tail -f /dev/null
       "
