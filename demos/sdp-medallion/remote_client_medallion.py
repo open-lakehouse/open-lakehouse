@@ -17,6 +17,7 @@ Run:
   python3 demos/sdp-medallion/remote_client_medallion.py          # build all
   python3 demos/sdp-medallion/remote_client_medallion.py --show   # read-only peek
 """
+
 from __future__ import annotations
 
 import inspect
@@ -59,7 +60,9 @@ def load_token() -> str:
 
 def session(token: str) -> SparkSession:
     spark = SparkSession.builder.remote(REMOTE).getOrCreate()
-    spark.conf.set(f"spark.sql.catalog.{CATALOG}", "io.unitycatalog.spark.UCSingleCatalog")
+    spark.conf.set(
+        f"spark.sql.catalog.{CATALOG}", "io.unitycatalog.spark.UCSingleCatalog"
+    )
     spark.conf.set(f"spark.sql.catalog.{CATALOG}.uri", UC_URI)
     spark.conf.set(f"spark.sql.catalog.{CATALOG}.token", token)
     return spark
@@ -76,10 +79,19 @@ class Pipeline:
 
     def mv(self, name: str, layer: str):
         """Register a materialized view. key = '<layer>.<name>'."""
+
         def deco(fn: Callable[[], DataFrame]):
-            deps = set(re.findall(r'p\.table\(["\']([^"\']+)["\']\)', inspect.getsource(fn)))
-            self.defs[f"{layer}.{name}"] = {"fn": fn, "layer": layer, "name": name, "deps": deps}
+            deps = set(
+                re.findall(r'p\.table\(["\']([^"\']+)["\']\)', inspect.getsource(fn))
+            )
+            self.defs[f"{layer}.{name}"] = {
+                "fn": fn,
+                "layer": layer,
+                "name": name,
+                "deps": deps,
+            }
             return fn
+
         return deco
 
     def table(self, key: str) -> DataFrame:
@@ -88,6 +100,7 @@ class Pipeline:
 
     def _topo(self) -> list[str]:
         order, seen = [], set()
+
         def visit(k: str):
             if k in seen:
                 return
@@ -96,6 +109,7 @@ class Pipeline:
                 visit(d)
             if k in self.defs:
                 order.append(k)
+
         for k in self.defs:
             visit(k)
         return order
@@ -114,24 +128,33 @@ class Pipeline:
 # --------------------------------------------------------------------------- #
 # Schema of the JSON `body` (matches the REAL orders_7d data)
 # --------------------------------------------------------------------------- #
-ITEM = StructType([
-    StructField("item_id", IntegerType()),
-    StructField("name", StringType()),
-    StructField("price", DoubleType()),
-    StructField("quantity", IntegerType()),
-])
-BODY = StructType([
-    StructField("customer_lat", DoubleType()),
-    StructField("customer_lon", DoubleType()),
-    StructField("brand_id", IntegerType()),
-    StructField("brand_name", StringType()),
-    StructField("items", ArrayType(ITEM)),
-    StructField("total", DoubleType()),
-])
+ITEM = StructType(
+    [
+        StructField("item_id", IntegerType()),
+        StructField("name", StringType()),
+        StructField("price", DoubleType()),
+        StructField("quantity", IntegerType()),
+    ]
+)
+BODY = StructType(
+    [
+        StructField("customer_lat", DoubleType()),
+        StructField("customer_lon", DoubleType()),
+        StructField("brand_id", IntegerType()),
+        StructField("brand_name", StringType()),
+        StructField("items", ArrayType(ITEM)),
+        StructField("total", DoubleType()),
+    ]
+)
 
 LIFECYCLE_EVENTS = [
-    "order_created", "kitchen_started", "kitchen_finished", "order_ready",
-    "driver_arrived", "driver_picked_up", "delivered",
+    "order_created",
+    "kitchen_started",
+    "kitchen_finished",
+    "order_ready",
+    "driver_arrived",
+    "driver_picked_up",
+    "delivered",
 ]  # excludes high-volume "driver_ping" GPS noise
 
 
@@ -141,22 +164,25 @@ LIFECYCLE_EVENTS = [
 def define(p: Pipeline) -> None:
     # ---- BRONZE: dimensions + raw orders ----
     @p.mv("dim_brands", "bronze")
-    def _():      return p.spark.read.parquet(f"{RAW}/dimensions/brands.parquet")
+    def _():
+        return p.spark.read.parquet(f"{RAW}/dimensions/brands.parquet")
 
     @p.mv("dim_items", "bronze")
-    def _():      return p.spark.read.parquet(f"{RAW}/dimensions/items.parquet")
+    def _():
+        return p.spark.read.parquet(f"{RAW}/dimensions/items.parquet")
 
     @p.mv("dim_categories", "bronze")
-    def _():      return p.spark.read.parquet(f"{RAW}/dimensions/categories.parquet")
+    def _():
+        return p.spark.read.parquet(f"{RAW}/dimensions/categories.parquet")
 
     @p.mv("dim_locations", "bronze")
-    def _():      return p.spark.read.parquet(f"{RAW}/dimensions/locations.parquet")
+    def _():
+        return p.spark.read.parquet(f"{RAW}/dimensions/locations.parquet")
 
     @p.mv("orders", "bronze")
     def _():
-        return (
-            p.spark.read.parquet(f"{RAW}/orders/orders_7d.parquet")
-            .withColumn("event_timestamp", f.to_timestamp(f.regexp_replace("ts", "T", " ")))
+        return p.spark.read.parquet(f"{RAW}/orders/orders_7d.parquet").withColumn(
+            "event_timestamp", f.to_timestamp(f.regexp_replace("ts", "T", " "))
         )
 
     # ---- SILVER: enriched events + per-order lifecycle ----
@@ -167,22 +193,35 @@ def define(p: Pipeline) -> None:
             & f.col("order_id").isNotNull()
             & f.col("event_timestamp").isNotNull()
         )
-        b = orders.withColumn("b", f.from_json("body", BODY)).select(
-            "event_id", "event_type", "event_timestamp", "ts_seconds",
-            "order_id", "location_id", "sequence",
-            f.col("b.brand_id").alias("brand_id"),
-            f.col("b.brand_name").alias("brand_name"),
-            f.col("b.total").alias("order_total"),
-            f.col("b.customer_lat").alias("latitude"),
-            f.col("b.customer_lon").alias("longitude"),
-            f.size("b.items").alias("num_items"),
-            f.aggregate("b.items", f.lit(0), lambda acc, x: acc + x["quantity"]).alias("total_quantity"),
-        ).withColumns({
-            "event_hour": f.hour("event_timestamp"),
-            "event_dow": f.dayofweek("event_timestamp"),
-            "is_weekend": f.dayofweek("event_timestamp").isin(1, 7),
-            "event_date": f.to_date("event_timestamp"),
-        })
+        b = (
+            orders.withColumn("b", f.from_json("body", BODY))
+            .select(
+                "event_id",
+                "event_type",
+                "event_timestamp",
+                "ts_seconds",
+                "order_id",
+                "location_id",
+                "sequence",
+                f.col("b.brand_id").alias("brand_id"),
+                f.col("b.brand_name").alias("brand_name"),
+                f.col("b.total").alias("order_total"),
+                f.col("b.customer_lat").alias("latitude"),
+                f.col("b.customer_lon").alias("longitude"),
+                f.size("b.items").alias("num_items"),
+                f.aggregate(
+                    "b.items", f.lit(0), lambda acc, x: acc + x["quantity"]
+                ).alias("total_quantity"),
+            )
+            .withColumns(
+                {
+                    "event_hour": f.hour("event_timestamp"),
+                    "event_dow": f.dayofweek("event_timestamp"),
+                    "is_weekend": f.dayofweek("event_timestamp").isin(1, 7),
+                    "event_date": f.to_date("event_timestamp"),
+                }
+            )
+        )
         loc = p.table("bronze.dim_locations").select(
             f.col("id").alias("location_id"), f.col("city").alias("city_name")
         )
@@ -196,17 +235,35 @@ def define(p: Pipeline) -> None:
             .groupBy("order_id", "location_id", "city_name")
             .pivot("event_type", LIFECYCLE_EVENTS)
             .agg(f.min("event_timestamp"))
-            .withColumnsRenamed({
-                "order_created": "created_at", "kitchen_started": "kitchen_started_at",
-                "kitchen_finished": "kitchen_finished_at", "order_ready": "order_ready_at",
-                "driver_arrived": "driver_arrived_at", "driver_picked_up": "pickup_at",
-                "delivered": "delivered_at",
-            })
-            .withColumns({
-                "kitchen_min": (f.unix_timestamp("kitchen_finished_at") - f.unix_timestamp("kitchen_started_at")) / 60,
-                "delivery_min": (f.unix_timestamp("delivered_at") - f.unix_timestamp("pickup_at")) / 60,
-                "total_min": (f.unix_timestamp("delivered_at") - f.unix_timestamp("created_at")) / 60,
-            })
+            .withColumnsRenamed(
+                {
+                    "order_created": "created_at",
+                    "kitchen_started": "kitchen_started_at",
+                    "kitchen_finished": "kitchen_finished_at",
+                    "order_ready": "order_ready_at",
+                    "driver_arrived": "driver_arrived_at",
+                    "driver_picked_up": "pickup_at",
+                    "delivered": "delivered_at",
+                }
+            )
+            .withColumns(
+                {
+                    "kitchen_min": (
+                        f.unix_timestamp("kitchen_finished_at")
+                        - f.unix_timestamp("kitchen_started_at")
+                    )
+                    / 60,
+                    "delivery_min": (
+                        f.unix_timestamp("delivered_at") - f.unix_timestamp("pickup_at")
+                    )
+                    / 60,
+                    "total_min": (
+                        f.unix_timestamp("delivered_at")
+                        - f.unix_timestamp("created_at")
+                    )
+                    / 60,
+                }
+            )
         )
         return lc.filter(f.col("delivered_at").isNotNull())
 
@@ -229,14 +286,20 @@ def define(p: Pipeline) -> None:
     def _():
         return (
             p.table("silver.order_lifecycle")
-            .groupBy(f.to_date("created_at").alias("order_date"), "location_id", "city_name")
+            .groupBy(
+                f.to_date("created_at").alias("order_date"), "location_id", "city_name"
+            )
             .agg(
                 f.count("order_id").alias("completed_orders"),
                 f.round(f.avg("kitchen_min"), 1).alias("avg_kitchen_min"),
                 f.round(f.avg("delivery_min"), 1).alias("avg_delivery_min"),
                 f.round(f.avg("total_min"), 1).alias("avg_total_min"),
-                f.round(f.percentile_approx("total_min", 0.5), 1).alias("p50_total_min"),
-                f.round(f.percentile_approx("total_min", 0.95), 1).alias("p95_total_min"),
+                f.round(f.percentile_approx("total_min", 0.5), 1).alias(
+                    "p50_total_min"
+                ),
+                f.round(f.percentile_approx("total_min", 0.95), 1).alias(
+                    "p95_total_min"
+                ),
             )
         )
 

@@ -12,6 +12,7 @@ that SDP does for you:
 
 The declarative version says the same thing in a few SQL `SELECT`s.
 """
+
 from __future__ import annotations
 
 import os
@@ -69,7 +70,9 @@ def run(spark: SparkSession) -> None:
         f.hour("event_timestamp").alias("event_hour"),
         f.to_date("event_timestamp").alias("event_date"),
     ).join(
-        locations.select(f.col("id").alias("location_id"), f.col("city").alias("city_name")),
+        locations.select(
+            f.col("id").alias("location_id"), f.col("city").alias("city_name")
+        ),
         on="location_id",
         how="left",
     )

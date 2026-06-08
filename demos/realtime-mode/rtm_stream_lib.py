@@ -10,6 +10,7 @@ Validated facts (Spark 4.1.0):
   - A console/memory sink needs spark.sql.streaming.realTimeMode.allowlistCheck=false.
   - RTM REQUIRES a Kafka source - rate/file sources are not supported.
 """
+
 from __future__ import annotations
 
 import json
@@ -52,20 +53,18 @@ _AWS_KEY_RE = r"AKIA[0-9A-Z]{16}"
 
 def guardrail(df: DataFrame) -> DataFrame:
     """Stateless guardrail checks -> reasons[] + ALLOW/QUARANTINE decision."""
-    return (
-        df.withColumn(
-            "reasons",
-            f.array_compact(
-                f.array(
-                    f.when(f.col("total") > 200, f.lit("HIGH_TOTAL")),
-                    f.when(f.col("num_items") > 7, f.lit("TOO_MANY_ITEMS")),
-                    f.when(f.col("note").rlike(_AWS_KEY_RE), f.lit("LEAKED_SECRET")),
-                )
-            ),
-        ).withColumn(
-            "decision",
-            f.when(f.size("reasons") > 0, f.lit("QUARANTINE")).otherwise(f.lit("ALLOW")),
-        )
+    return df.withColumn(
+        "reasons",
+        f.array_compact(
+            f.array(
+                f.when(f.col("total") > 200, f.lit("HIGH_TOTAL")),
+                f.when(f.col("num_items") > 7, f.lit("TOO_MANY_ITEMS")),
+                f.when(f.col("note").rlike(_AWS_KEY_RE), f.lit("LEAKED_SECRET")),
+            )
+        ),
+    ).withColumn(
+        "decision",
+        f.when(f.size("reasons") > 0, f.lit("QUARANTINE")).otherwise(f.lit("ALLOW")),
     )
 
 
@@ -102,8 +101,10 @@ def start_query(
     # -- the one-line change --------------------------------------------------
     if use_realtime:
         rt = spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(RTM_INTERVAL)
-        return writer._jwrite.trigger(rt).start()       # Real-Time Mode (5 minutes)
-    return writer.trigger(processingTime=MICROBATCH_INTERVAL).start()  # micro-batch (5 seconds)
+        return writer._jwrite.trigger(rt).start()  # Real-Time Mode
+    return writer.trigger(
+        processingTime=MICROBATCH_INTERVAL
+    ).start()  # micro-batch
     # -------------------------------------------------------------------------
 
 

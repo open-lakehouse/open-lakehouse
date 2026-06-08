@@ -7,6 +7,7 @@ The only Python in the pipeline: SDP can't read external parquet from a SQL
 Catalog-managed Delta in Unity Catalog: provider + the catalogManaged feature
 flag, no explicit location (the catalog assigns it under its storage root).
 """
+
 import os
 
 from pyspark import pipelines as dp
