@@ -29,11 +29,12 @@ from pyspark.sql.types import (
 
 TOPIC = "rtm-orders"
 BOOTSTRAP = "localhost:9092"
-# Micro-batch latency equals its trigger interval. Real-Time Mode keeps
-# sub-second latency even with a long interval (it processes continuously and
-# only checkpoints at the boundary) - so the contrast is 5s vs "5 minutes".
+# Micro-batch latency equals its trigger interval. Real-Time Mode processes
+# continuously regardless of the interval. We use a short RTM interval here so
+# the in-memory table (which commits at the interval boundary) fills fast enough
+# to show live; in production you'd set minutes and still get sub-second latency.
 MICROBATCH_INTERVAL = "5 seconds"
-RTM_INTERVAL = "5 minutes"  # >= realTimeMode.minBatchDuration (5000 ms)
+RTM_INTERVAL = "10 seconds"  # >= realTimeMode.minBatchDuration (5000 ms)
 
 SCHEMA = StructType(
     [
