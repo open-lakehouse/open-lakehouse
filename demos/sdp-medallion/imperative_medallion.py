@@ -1,4 +1,4 @@
-"""The SAME medallion as the declarative SQL pipeline — written imperatively.
+"""The SAME medallion as the declarative SQL pipeline - written imperatively.
 
 This file is a teaching artifact for the "imperative vs declarative" demo. Put
 it next to transformations/*.sql and count what you have to manage by hand here
@@ -52,7 +52,7 @@ def run(spark: SparkSession) -> None:
     write(orders_bronze, "orders_bronze")
     write(spark.read.parquet(f"{DIMS_PATH}/locations.parquet"), "dim_locations")
 
-    # ---- SILVER (depends on bronze — you must read the written tables back) ----
+    # ---- SILVER (depends on bronze - you must read the written tables back) ----
     bronze = spark.read.table(f"{CATALOG}.{SCHEMA}.orders_bronze")
     locations = spark.read.table(f"{CATALOG}.{SCHEMA}.dim_locations")
     parsed = bronze.withColumn("d", f.from_json("body", _BODY))

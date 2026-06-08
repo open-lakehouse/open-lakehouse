@@ -8,6 +8,6 @@ storage: file:///tmp/sdp-medallion-storage
 libraries:
   - glob:
       include: transformations/**
-# SDP inherits the cluster's spark-defaults.conf — Delta extensions, UC catalog,
-# S3 scheme handlers, warehouse dir. Don't repeat those here — they're static
+# SDP inherits the cluster's spark-defaults.conf - Delta extensions, UC catalog,
+# S3 scheme handlers, warehouse dir. Don't repeat those here - they're static
 # Spark configs and SDP can't re-set them at session time.

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 DEMO_NAME="realtime-mode"
-echo "→ teardown: ${DEMO_NAME}"
+echo "-> teardown: ${DEMO_NAME}"
 
 # Stop the streaming spark-submit running inside the Spark master container.
 # pkill returns 1 if nothing matched; tolerate that with `|| true`.
@@ -20,4 +20,4 @@ done
 docker exec spark-master-41 \
   rm -rf /opt/spark-data/checkpoints/rtm-realtime-mode || true
 
-echo "✓ teardown: ${DEMO_NAME} complete"
+echo "ok teardown: ${DEMO_NAME} complete"

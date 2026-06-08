@@ -23,7 +23,7 @@ SPEC="${SDP_DEMO_DIR}/spark-pipeline.yml"
 
 echo "entrypoint: schema='${NS}', spark-defaults rendered"
 if [ "${UC_TOKEN}" = "not_used" ]; then
-  echo "entrypoint: WARNING — UC_TOKEN not set; SDP writes to UC will 401."
+  echo "entrypoint: WARNING - UC_TOKEN not set; SDP writes to UC will 401."
 fi
 
 # Ensure the presenter's UC schema exists and start from a clean slate (UC has

@@ -33,6 +33,7 @@ RUN cp /home/jovyan/demos/sdp-medallion/notebooks/sdp_medallion.ipynb /home/jovy
  && cp /home/jovyan/demos/realtime-mode/notebooks/rtm_trigger.ipynb   /home/jovyan/
 COPY demos/FACILITATOR_GUIDE.md /home/jovyan/START_HERE.md
 
+COPY docker/jupyter-hosted/log4j2.properties /opt/spark/conf/log4j2.properties
 COPY docker/jupyter-hosted/spark-defaults.conf.template /opt/spark/conf/spark-defaults.conf.template
 COPY docker/jupyter-hosted/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

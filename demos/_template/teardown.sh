@@ -5,7 +5,7 @@
 set -euo pipefail
 
 DEMO_NAME="<demo-name>"
-echo "→ teardown: ${DEMO_NAME}"
+echo "-> teardown: ${DEMO_NAME}"
 
 # Drop Iceberg tables (idempotent)
 # docker exec spark-master-41 /opt/spark/bin/spark-sql -e "DROP TABLE IF EXISTS iceberg.<schema>.<table>;"
@@ -19,4 +19,4 @@ echo "→ teardown: ${DEMO_NAME}"
 # Stop demo-specific services (commented; uncomment if this demo started them)
 # ./lakehouse stop mlflow
 
-echo "✓ teardown: ${DEMO_NAME} complete"
+echo "ok teardown: ${DEMO_NAME} complete"

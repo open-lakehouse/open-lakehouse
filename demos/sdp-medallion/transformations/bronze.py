@@ -1,8 +1,8 @@
-"""Bronze layer — ingestion only.
+"""Bronze layer - ingestion only.
 
 The only Python in the pipeline: SDP can't read external parquet from a SQL
 `FROM` clause, so the two raw inputs are read here. Everything downstream
-(silver, gold) is pure declarative SQL — see the .sql files in this directory.
+(silver, gold) is pure declarative SQL - see the .sql files in this directory.
 
 Catalog-managed Delta in Unity Catalog: provider + the catalogManaged feature
 flag, no explicit location (the catalog assigns it under its storage root).

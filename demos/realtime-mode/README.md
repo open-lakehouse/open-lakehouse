@@ -1,12 +1,12 @@
 # realtime-mode
 
-> Spark 4.1 Structured Streaming **Real-Time Mode** — Kafka → guardrail → Kafka with sub-second routing.
+> Spark 4.1 Structured Streaming **Real-Time Mode** - Kafka -> guardrail -> Kafka with sub-second routing.
 
 ## Purpose
 
-Demonstrates Real-Time Mode (RTM) on OSS Spark 4.1.0: a single stateless query reads Ethereum-style block events from one Kafka topic, applies guardrail checks (gas limits, anomalous transaction counts, PII / credential leakage in `extra_data`), and routes each record to either an `-allowed` or `-quarantine` output topic via the `topic` column on the write — no `forEachBatch`, no double-writes.
+Demonstrates Real-Time Mode (RTM) on OSS Spark 4.1.0: a single stateless query reads Ethereum-style block events from one Kafka topic, applies guardrail checks (gas limits, anomalous transaction counts, PII / credential leakage in `extra_data`), and routes each record to either an `-allowed` or `-quarantine` output topic via the `topic` column on the write - no `forEachBatch`, no double-writes.
 
-RTM here means `Trigger.RealTime("5 seconds")` + `outputMode("update")`. The Scala `Trigger.RealTime(...)` API landed in 4.1.0 ([SPARK-52330 SPIP](https://issues.apache.org/jira/browse/SPARK-52330), [SPARK-53736](https://issues.apache.org/jira/browse/SPARK-53736)) as `@Experimental`. **There is no native PySpark `trigger(realTime=...)` kwarg in 4.1.0** — `rtm_pipeline.py` reaches through the JVM (`spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(...)`) to construct the trigger, then drives `start()` through the Java `DataStreamWriter`. Set `USE_REALTIME=0` to fall back to `trigger(processingTime="0 seconds")` if you want pure-Python and don't need single-digit-ms latency.
+RTM here means `Trigger.RealTime("5 seconds")` + `outputMode("update")`. The Scala `Trigger.RealTime(...)` API landed in 4.1.0 ([SPARK-52330 SPIP](https://issues.apache.org/jira/browse/SPARK-52330), [SPARK-53736](https://issues.apache.org/jira/browse/SPARK-53736)) as `@Experimental`. **There is no native PySpark `trigger(realTime=...)` kwarg in 4.1.0** - `rtm_pipeline.py` reaches through the JVM (`spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(...)`) to construct the trigger, then drives `start()` through the Java `DataStreamWriter`. Set `USE_REALTIME=0` to fall back to `trigger(processingTime="0 seconds")` if you want pure-Python and don't need single-digit-ms latency.
 
 ## Prereqs
 
@@ -23,11 +23,11 @@ running streams + Connect don't compose cleanly). Verification reads the
 output topics with `kafka-console-consumer` inside the Kafka container.
 
 The stack runs Spark + Kafka on the **host network**, so the Kafka bootstrap
-is `localhost:9092` from inside `spark-master-41` — *not* `kafka:9092`. The
+is `localhost:9092` from inside `spark-master-41` - *not* `kafka:9092`. The
 producer and the streaming job both read `KAFKA_BOOTSTRAP_SERVERS`; pass it
 explicitly per the Run section.
 
-`spark-submit` (and any `spark-pipelines run`) must run as `-u root` — the
+`spark-submit` (and any `spark-pipelines run`) must run as `-u root` - the
 default `spark` user has `home=/nonexistent` and Ivy / checkpoint dirs trip
 on it.
 
@@ -155,7 +155,7 @@ After the seeded run:
 - Spark master logs show one active streaming query named `rtm-realtime-mode`.
 - Checkpoint dir on the master container: `/opt/spark-data/checkpoints/rtm-realtime-mode` exists and is non-empty.
 
-For a continuous demo, swap `--seeded` for `--num-messages 0` on the producer — it will emit ~10 msg/sec with random validation outcomes.
+For a continuous demo, swap `--seeded` for `--num-messages 0` on the producer - it will emit ~10 msg/sec with random validation outcomes.
 
 ## Teardown
 
@@ -165,22 +165,22 @@ bash demos/realtime-mode/teardown.sh
 
 This stops the streaming query (by killing the spark-submit JVM inside `spark-master-41`), deletes the three Kafka topics, and removes the checkpoint directory.
 
-## Notes — stack-specific gotchas
+## Notes - stack-specific gotchas
 
 - **`--packages` is broken on the stock `apache/spark:4.1.0` image.** The
   default `spark` user has `home=/nonexistent`, and Ivy fails creating
-  `/nonexistent/.ivy2.5.2/cache/resolved-…-1.0.xml` even with the dir
+  `/nonexistent/.ivy2.5.2/cache/resolved-...-1.0.xml` even with the dir
   pre-made and chmod-ed. `spark.jars.ivy` is ignored. Pre-downloading the
-  Kafka jars (done by `./lakehouse setup` →
+  Kafka jars (done by `./lakehouse setup` ->
   `scripts/tools/download-jars.sh`) and using `--jars` sidesteps Ivy
   entirely. The Step 3 command above uses this approach.
-- **Bootstrap is `localhost:9092`, not `kafka:9092`** — Spark and Kafka run
+- **Bootstrap is `localhost:9092`, not `kafka:9092`** - Spark and Kafka run
   on the host network, so service-name resolution doesn't work. Both the
   Spark job and the host-side producer read `KAFKA_BOOTSTRAP_SERVERS`.
-- **Submit as `-u root`** — same `home=/nonexistent` reason. Without it,
+- **Submit as `-u root`** - same `home=/nonexistent` reason. Without it,
   spark-submit can't write to the checkpoint dir or Ivy cache.
 - **Loud-but-ignorable warnings on submit.** `ClassNotFoundException` for
   `IcebergSparkSessionExtensions`, `DeltaSparkSessionExtension`, and
-  `S3AFileSystem` print at startup — Spark loads them eagerly because
+  `S3AFileSystem` print at startup - Spark loads them eagerly because
   they're set in `spark-defaults.conf`, but this job doesn't need them.
   The streaming query starts fine afterward.

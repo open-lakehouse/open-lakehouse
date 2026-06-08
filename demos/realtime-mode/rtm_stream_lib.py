@@ -1,4 +1,4 @@
-"""Real-Time Mode demo helpers — Kafka source -> guardrails -> live sink.
+"""Real-Time Mode demo helpers - Kafka source -> guardrails -> live sink.
 
 The whole point of the demo: enabling Real-Time Mode is a ONE-LINE change.
 `start_query(spark, use_realtime=False)` uses a normal micro-batch trigger;
@@ -8,7 +8,7 @@ via the JVM (there's no native PySpark kwarg for it yet).
 Validated facts (Spark 4.1.0):
   - RTM minimum trigger interval is 5000 ms (realTimeMode.minBatchDuration).
   - A console/memory sink needs spark.sql.streaming.realTimeMode.allowlistCheck=false.
-  - RTM REQUIRES a Kafka source — rate/file sources are not supported.
+  - RTM REQUIRES a Kafka source - rate/file sources are not supported.
 """
 from __future__ import annotations
 
@@ -29,7 +29,11 @@ from pyspark.sql.types import (
 
 TOPIC = "rtm-orders"
 BOOTSTRAP = "localhost:9092"
-RTM_INTERVAL = "5 seconds"  # must be >= realTimeMode.minBatchDuration (5000 ms)
+# Micro-batch latency equals its trigger interval. Real-Time Mode keeps
+# sub-second latency even with a long interval (it processes continuously and
+# only checkpoints at the boundary) - so the contrast is 5s vs "5 minutes".
+MICROBATCH_INTERVAL = "5 seconds"
+RTM_INTERVAL = "5 minutes"  # >= realTimeMode.minBatchDuration (5000 ms)
 
 SCHEMA = StructType(
     [
@@ -46,7 +50,7 @@ _AWS_KEY_RE = r"AKIA[0-9A-Z]{16}"
 
 
 def guardrail(df: DataFrame) -> DataFrame:
-    """Stateless guardrail checks → reasons[] + ALLOW/QUARANTINE decision."""
+    """Stateless guardrail checks -> reasons[] + ALLOW/QUARANTINE decision."""
     return (
         df.withColumn(
             "reasons",
@@ -75,7 +79,7 @@ def start_query(
 
     Writes to an in-memory table (queryable live as `query_name`) so a notebook
     can display a clean, growing table of decisions. The ONLY difference RTM
-    makes is the trigger — see the if/else at the bottom.
+    makes is the trigger - see the if/else at the bottom.
     """
     raw = (
         spark.readStream.format("kafka")
@@ -94,12 +98,12 @@ def start_query(
         guarded.writeStream.format("memory").queryName(query_name).outputMode("update")
     )
 
-    # ── the one-line change ──────────────────────────────────────────────────
+    # -- the one-line change --------------------------------------------------
     if use_realtime:
         rt = spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(RTM_INTERVAL)
-        return writer._jwrite.trigger(rt).start()       # Real-Time Mode
-    return writer.trigger(processingTime=RTM_INTERVAL).start()  # micro-batch
-    # ─────────────────────────────────────────────────────────────────────────
+        return writer._jwrite.trigger(rt).start()       # Real-Time Mode (5 minutes)
+    return writer.trigger(processingTime=MICROBATCH_INTERVAL).start()  # micro-batch (5 seconds)
+    # -------------------------------------------------------------------------
 
 
 def start_producer(
