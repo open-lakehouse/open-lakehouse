@@ -43,7 +43,7 @@ ENV PYSPARK_PYTHON=python3 PYSPARK_DRIVER_PYTHON=python3 \
     ORDERS_PATH=s3a://uc-quickstart-207734640204-usw2/medallion-demo/raw/orders \
     DIMS_PATH=s3a://uc-quickstart-207734640204-usw2/medallion-demo/raw/dimensions \
     MEDALLION_WAREHOUSE=s3://uc-quickstart-207734640204-usw2/warehouse/medallion \
-    MEDALLION_MAX_ROWS=300000
+    MEDALLION_MAX_ROWS=50000
 
 WORKDIR /home/jovyan
 EXPOSE 8889
