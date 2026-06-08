@@ -1,6 +1,9 @@
 name: sdp-medallion
 catalog: managed_demo
-schema: bronze
+# Per-presenter schema. The notebook rewrites this line to the presenter's
+# namespace (from DEMO_NS) before running, so concurrent presenters don't
+# collide on the same tables.
+schema: medallion_demo
 storage: file:///tmp/sdp-medallion-storage
 libraries:
   - glob:

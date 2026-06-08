@@ -142,8 +142,43 @@ Without them you get `ModuleNotFoundError` from `pyspark/pipelines/cli.py`.
   read-only (no `POST` endpoints) and its native API rejects `ICEBERG` as a
   `data_source_format`. SDP-on-UC works for **Delta only**. See
   [[unity-catalog-oss]] for the full UC write-side limitations.
-- **SQL `.sql` transformations targeting UC.** They can't carry `location`.
-  Use Python transformations for any UC-targeted dataset.
+## Catalog-managed tables — SQL transformations DO work (verified 2026-06-08)
+
+The "location via `table_properties`, Python-only" rules above apply to UC
+deployments where you supply an explicit storage location. A UC catalog with a
+**`storage_root`** configured (e.g. a `managed_demo`-style catalog) instead
+expects **catalog-managed Delta tables**: the catalog assigns the location under
+its storage root, so you pass **no `location` at all** — just the
+`delta.feature.catalogManaged` feature flag. That removes the only reason SQL
+couldn't target UC, so **SQL `.sql` transformations now work**:
+
+```sql
+CREATE MATERIALIZED VIEW orders_enriched
+USING delta
+TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported')
+AS SELECT ... FROM orders_bronze;
+```
+
+Notes:
+- Set the provider via the **`USING delta`** clause, NOT `TBLPROPERTIES('provider'=...)`
+  — `provider` is reserved (`UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY`).
+- Python `@dp.materialized_view` for catalog-managed tables: pass
+  `table_properties={"provider": "delta", "delta.feature.catalogManaged": "supported"}`
+  with no `location`.
+- Reading external files (parquet) still can't be a SQL `FROM` — SDP qualifies
+  `parquet.\`path\`` as a catalog table and fails. Keep file ingestion in a
+  Python `@dp.materialized_view`; do the transforms in SQL.
+- S3A still needs an **explicit endpoint** (`s3.<region>.amazonaws.com`) or
+  writes to the managed `__unitystorage/` prefix 403 on a region/SigV4 mismatch.
+
+## What's NOT possible today
+
+- **SDP → UC-managed Iceberg tables.** UC OSS's Iceberg REST adapter is
+  read-only (no `POST` endpoints) and its native API rejects `ICEBERG` as a
+  `data_source_format`. SDP-on-UC works for **Delta only**. See
+  [[unity-catalog-oss]] for the full UC write-side limitations.
+- **SQL reading external files.** A SQL `FROM parquet.\`s3a://...\`` gets
+  catalog-qualified by SDP and fails — ingest files in a Python transformation.
 
 ## Reference demo
 

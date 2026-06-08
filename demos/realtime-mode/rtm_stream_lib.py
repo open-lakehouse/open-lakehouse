@@ -67,12 +67,15 @@ def guardrail(df: DataFrame) -> DataFrame:
 def start_query(
     spark: SparkSession,
     use_realtime: bool,
+    query_name: str = "decisions",
     bootstrap: str = BOOTSTRAP,
     topic: str = TOPIC,
 ):
-    """Build the kafka -> guardrail -> console stream and start it.
+    """Build the kafka -> guardrail -> in-memory stream and start it.
 
-    The ONLY difference RTM makes is the trigger — see the if/else at the bottom.
+    Writes to an in-memory table (queryable live as `query_name`) so a notebook
+    can display a clean, growing table of decisions. The ONLY difference RTM
+    makes is the trigger — see the if/else at the bottom.
     """
     raw = (
         spark.readStream.format("kafka")
@@ -88,9 +91,7 @@ def start_query(
         "order_id", "brand", "total", "decision", "reasons"
     )
     writer = (
-        guarded.writeStream.format("console")
-        .option("truncate", "false")
-        .outputMode("update")
+        guarded.writeStream.format("memory").queryName(query_name).outputMode("update")
     )
 
     # ── the one-line change ──────────────────────────────────────────────────
