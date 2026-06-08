@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 
-def generate_sql_from_nl(prompt: str, tables: list[str] | None = None) -> dict[str, Any]:
+def generate_sql_from_nl(
+    prompt: str, tables: list[str] | None = None
+) -> dict[str, Any]:
     """Return placeholder NL -> Spark SQL output for UI integration."""
     normalized_prompt = prompt.strip().lower()
     available_tables = tables or ["sales.orders"]

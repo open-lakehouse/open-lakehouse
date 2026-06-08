@@ -39,7 +39,9 @@ def get_logger(
     return logging.LoggerAdapter(base_logger, context)
 
 
-def log_event(logger: logging.LoggerAdapter[logging.Logger], event: str, **fields: Any) -> None:
+def log_event(
+    logger: logging.LoggerAdapter[logging.Logger], event: str, **fields: Any
+) -> None:
     """Log a lightweight structured event message."""
     if not fields:
         logger.info(event)
