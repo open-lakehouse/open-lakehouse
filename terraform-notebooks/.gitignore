@@ -1,0 +1,7 @@
+# Never commit state or the UC token.
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example

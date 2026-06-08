@@ -1,5 +1,5 @@
 name: sdp-medallion
-catalog: unity
+catalog: managed_demo
 schema: bronze
 storage: file:///tmp/sdp-medallion-storage
 libraries:

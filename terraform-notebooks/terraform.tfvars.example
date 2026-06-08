@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+# The UC bearer token (JWT) — do NOT commit. Source it from the UC console.
+uc_token = "eyJ...PASTE_FULL_TOKEN..."
+
+# Start with one presenter to validate end-to-end, then add names and re-apply:
+#   presenters = ["alice", "bob", "carol", "dan", "erin"]
+presenters = ["demo1"]
