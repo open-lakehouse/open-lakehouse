@@ -21,6 +21,7 @@ Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Datab
 4. **Don't `docker compose down -v` without explicit user consent.** `-v` wipes named volumes (UC metadata, MLflow runs, Airflow history). `./lakehouse stop` is safe and is what you should default to.
 5. **Demo slots.** Four: `sdp-medallion` (**built** — SDP→UC→Delta medallion), `unity-catalog-multi-engine`, `realtime-mode` (placeholders), `local-mode-spark` (deferred). Each follows the `demos/_template/` contract. Don't fabricate placeholder demos — scaffold from the template when asked.
 6. **AGENTS.md is a pointer**, not a duplicate of this file. Keep CLAUDE.md authoritative.
+7. **Always work on a feature branch.** Never commit directly to `main`. Create a dedicated branch (e.g. `feat/<short-description>`) before the first file change. See [.agents/rules/branching-rule.mdc](.agents/rules/branching-rule.mdc) for the full workflow and naming conventions.
 
 ## File index — where to look for what
 
