@@ -1,0 +1,46 @@
+# Copy to terraform.tfvars and edit, OR let scripts/terraform/deploy-spark-ecs.sh pass these
+# via TF_VAR_* environment variables. *.tfvars are gitignored by default.
+
+aws_region    = "us-west-2"
+name_prefix   = "spark-ecs"
+ecr_repo_name = "open-lakehouse-spark"
+image_tag     = "v0.1.0"
+
+# Networking: leave empty to use the account's default VPC and its public subnets.
+vpc_id     = ""
+subnet_ids = []
+
+# Cluster sizing. Fargate tasks are fixed-size; add capacity via worker_count.
+worker_count   = 3
+master_cpu     = 1024
+master_memory  = 2048
+worker_cpu     = 2048
+worker_memory  = 8192
+connect_cpu    = 2048
+connect_memory = 8192
+
+# Spark Connect server + public gRPC endpoint (NLB).
+enable_connect = true
+
+# Extra spark conf appended to spark-defaults on every role. Use this to wire a
+# remote Unity Catalog, a warehouse dir, S3 endpoint overrides, etc.
+extra_spark_conf = {
+  # "spark.sql.catalog.unity"     = "io.unitycatalog.spark.UCSingleCatalog"
+  # "spark.sql.catalog.unity.uri" = "https://uc.openlakehousedemos.dev"
+  # "spark.sql.warehouse.dir"     = "s3://my-lakehouse/warehouse"
+}
+
+# DNS / TLS (Route 53 zone for openlakehousedemos.dev). Leave domains empty for
+# HTTP-only on the raw LB DNS names.
+domain_name         = "spark.openlakehousedemos.dev"
+connect_domain_name = "connect.openlakehousedemos.dev"
+hosted_zone_id      = "CHANGE-ME-ZONEID"
+# One wildcard cert covers both subdomains:
+cert_domain_name = "*.openlakehousedemos.dev"
+
+# Optional: grant tasks read/write on a data-lake bucket via the task IAM role.
+s3_data_bucket = ""
+
+tags = {
+  project = "open-lakehouse"
+}

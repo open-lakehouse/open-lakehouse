@@ -124,3 +124,4 @@ filterwarnings = [
 [tool.bandit]
 exclude_dirs = ["tests", "notebooks", ".venv"]
 skips = ["B101"]  # Skip assert warnings in non-test code
+

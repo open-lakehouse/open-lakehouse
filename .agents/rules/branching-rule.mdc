@@ -1,0 +1,35 @@
+---
+description: All work must happen on a dedicated feature branch — never commit directly to main.
+alwaysApply: true
+---
+
+# Branching Workflow
+
+## Before Starting Any Work
+
+1. **Check the current branch.** If on `main`, create and switch to a new branch before making any changes.
+2. **Suggest a branch name** using the pattern `feat/<short-description>` (e.g. `feat/add-lineage-api`).
+3. **Always offer the user a choice**: present the suggested name and an option to enter their own.
+
+Use the `AskQuestion` tool to let the user pick:
+
+- Option A: the suggested `feat/*` name
+- Option B: "I'll provide my own branch name"
+
+## Branch Naming Conventions
+
+| Prefix       | Use when                              |
+|--------------|---------------------------------------|
+| `feat/`      | Adding new functionality              |
+| `fix/`       | Fixing a bug                          |
+| `chore/`     | Build, CI, dependency, or repo upkeep |
+| `refactor/`  | Restructuring without behavior change |
+| `test/`      | Adding or improving tests only        |
+
+Keep names short, lowercase, and hyphen-separated (e.g. `feat/column-lineage-parser`).
+
+## Rules
+
+- **Never commit directly to `main`.**
+- Create the branch with `git checkout -b <branch>` before the first file change.
+- One logical unit of work per branch.

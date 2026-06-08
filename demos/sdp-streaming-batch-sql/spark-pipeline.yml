@@ -1,0 +1,10 @@
+name: sdp-streaming-batch-sql
+storage: file:///tmp/sdp-streaming-batch-sql/pipeline-storage
+configuration:
+  # Streaming tables materialize to Delta — without this the streaming write
+  # falls back to a file sink whose `_spark_metadata` directory breaks on
+  # object storage.
+  spark.sql.sources.default: delta
+libraries:
+  - glob:
+      include: transformations/**

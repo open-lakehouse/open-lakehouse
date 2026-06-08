@@ -45,6 +45,11 @@ spark.hadoop.fs.s3a.secret.key            your_secret_key
 spark.hadoop.fs.s3a.path.style.access     true
 spark.hadoop.fs.s3a.impl                  org.apache.hadoop.fs.s3a.S3AFileSystem
 spark.hadoop.fs.s3a.connection.ssl.enabled false
+# SeaweedFS S3 returns HTTP 500 on bulk DeleteObjects and on the Hadoop
+# FileOutputCommitter's directory-marker cleanup. Delete one object at a time
+# and keep directory markers so recursive deletes / commits don't fail.
+spark.hadoop.fs.s3a.multiobjectdelete.enable false
+spark.hadoop.fs.s3a.directory.marker.retention keep
 
 # UC stores table LOCATIONs as s3:// (no 'a'). Map that scheme to S3AFileSystem
 # so Hadoop can read/write SeaweedFS regardless of how the URI is written.
@@ -66,6 +71,10 @@ spark.executor.memory                     8g
 spark.executor.cores                      2
 # Warehouse dir for SDP-managed tables. s3:// (not s3a://) so UC accepts it.
 spark.sql.warehouse.dir                   s3://lakehouse/warehouse/sdp
+# Default new tables to Delta. Parquet writes use the Hadoop FileOutputCommitter
+# (_temporary staging + rename), and that rename's marker cleanup 500s on
+# SeaweedFS S3. Delta writes commit directly via _delta_log — no rename.
+spark.sql.sources.default                 delta
 
 # ============================================================================
 # Event Logging

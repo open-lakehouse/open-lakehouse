@@ -23,11 +23,14 @@ Every `demos/<name>/README.md` has these five sections, in order:
 | Demo | Status | Transport | What it shows |
 |------|--------|-----------|---------------|
 | [`sdp-medallion/`](sdp-medallion/) | **Built** | `spark-pipelines` | Bronze -> Silver -> Gold via Spark Declarative Pipelines, materialized as Delta tables in Unity Catalog OSS. |
+| [`sdp-imperative-to-declarative/`](sdp-imperative-to-declarative/) | **Built** | Connect + `spark-pipelines` | The same medallion pipeline written twice - imperative PySpark vs SDP - to show what SDP removes. |
+| [`sdp-streaming-batch-sql/`](sdp-streaming-batch-sql/) | **Built** | `spark-pipelines` | `CREATE STREAMING TABLE` vs `CREATE MATERIALIZED VIEW` - streaming vs batch semantics, in SQL. |
+| [`sdp-cli-lifecycle/`](sdp-cli-lifecycle/) | **Built** | `spark-pipelines` | The `spark-pipelines` developer loop as shell commands - `init`, `dry-run`, `run`. |
 | [`unity-catalog-multi-engine/`](unity-catalog-multi-engine/) | Placeholder | Spark Connect + DuckDB | One catalog, multiple engines reading the same table. |
 | [`realtime-mode/`](realtime-mode/) | **Built** | `spark-submit` (Structured Streaming) | Kafka -> Kafka stateless guardrail in Real-Time Mode (`trigger(realTime=...)`), dynamic topic routing to `-allowed` / `-quarantine`. |
 | [`local-mode-spark/`](local-mode-spark/) | **Not yet implemented** | Local (no cluster) | In-process SparkSession for offline / laptop-only demos. Backs the `--spark-local` flag. |
 
-`sdp-medallion` and `realtime-mode` are working demos with full READMEs.
+The four SDP demos and `realtime-mode` are working demos with full READMEs.
 `unity-catalog-multi-engine` and `local-mode-spark` are placeholders -
 content is added demo-by-demo, never fabricated. To scaffold:
 

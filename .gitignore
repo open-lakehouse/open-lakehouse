@@ -7,6 +7,9 @@ config/unity-catalog/server.properties
 .env
 .env.*
 !.env.example
+# Per-recipe Terraform env files (real values); only the .example is tracked.
+.env-terraform.*
+!.env-terraform.*.example
 .envrc
 credentials.env
 **/credentials*.env
@@ -70,6 +73,9 @@ work/
 # MLflow
 mlruns/
 mlartifacts/
+
+# Generated test data (./lakehouse testdata generate — can be multi-GB)
+/data/
 
 # ─── Terraform ──────────────────────────────────────────────────────────
 # Real tfvars contain credentials — only `.example` is tracked.

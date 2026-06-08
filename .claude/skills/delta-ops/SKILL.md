@@ -1,11 +1,11 @@
 ---
 name: delta-ops
-description: Delta Lake 4.0 operations on Spark 4.1 in this stack. Load when working with Delta tables specifically — covers OPTIMIZE, VACUUM, time travel, UniForm interop with Iceberg, and when to choose Delta over Iceberg here.
+description: Delta Lake 4.2 operations on Spark 4.1 in this stack. Load when working with Delta tables specifically — covers OPTIMIZE, VACUUM, time travel, UniForm interop with Iceberg, and when to choose Delta over Iceberg here.
 ---
 
 # Delta Lake operations
 
-Delta Lake 4.0.1 is wired by default in this stack. The JARs (`delta-spark_2.13-4.0.1.jar`, `delta-storage-4.0.1.jar`) ship via `./lakehouse setup`, and `config/spark/spark-defaults.conf.example` enables both Iceberg and Delta extensions plus registers `spark_catalog` as the `DeltaCatalog`. You don't need per-session config — just write Delta.
+Delta Lake 4.2.0 is wired by default in this stack. The JARs (`delta-spark_2.13-4.2.0.jar`, `delta-storage-4.2.0.jar`) ship via `./lakehouse setup`, and `config/spark/spark-defaults.conf.example` enables both Iceberg and Delta extensions plus registers `spark_catalog` as the `DeltaCatalog`. You don't need per-session config — just write Delta.
 
 ```python
 # Sanity check the extensions on a fresh Connect session
