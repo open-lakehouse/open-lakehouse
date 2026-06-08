@@ -27,9 +27,11 @@ COPY jars/ /opt/spark/jars-extra/
 # Bake the demos (notebooks + transforms + libs + specs).
 COPY demos/sdp-medallion/   /home/jovyan/demos/sdp-medallion/
 COPY demos/realtime-mode/   /home/jovyan/demos/realtime-mode/
-# Surface the notebooks at the Lab root for presenters.
+# Surface the notebooks + facilitator guide at the Lab root for presenters.
 RUN cp /home/jovyan/demos/sdp-medallion/notebooks/sdp_medallion.ipynb /home/jovyan/ \
- && cp /home/jovyan/demos/realtime-mode/notebooks/rtm_trigger.ipynb   /home/jovyan/
+ && cp /home/jovyan/demos/sdp-medallion/notebooks/imperative_vs_declarative.ipynb /home/jovyan/ \
+ && cp /home/jovyan/demos/realtime-mode/notebooks/rtm_trigger.ipynb   /home/jovyan/ \
+ && cp /home/jovyan/demos/FACILITATOR_GUIDE.md /home/jovyan/START_HERE.md
 
 COPY docker/jupyter-hosted/spark-defaults.conf.template /opt/spark/conf/spark-defaults.conf.template
 COPY docker/jupyter-hosted/entrypoint.sh /usr/local/bin/entrypoint.sh
