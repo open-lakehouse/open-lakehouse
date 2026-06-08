@@ -70,7 +70,9 @@ def load_settings(
     openai_api_key = os.getenv("OPENAI_API_KEY", "").strip()
     openai_model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini").strip()
     spark_master = os.getenv("SPARK_MASTER", "").strip()
-    catalog_access_mode = _parse_catalog_access_mode(os.getenv("CATALOG_ACCESS_MODE", "local"))
+    catalog_access_mode = _parse_catalog_access_mode(
+        os.getenv("CATALOG_ACCESS_MODE", "local")
+    )
     catalog_name = os.getenv("CATALOG_NAME", "").strip()
     remote_catalog_uri = os.getenv("REMOTE_CATALOG_URI", "").strip()
     query_row_limit = _parse_positive_int(

@@ -22,7 +22,9 @@ def bool_from_env(value: str | None, default: bool = False) -> bool:
     return default
 
 
-def mask_secret(secret: str, *, visible_prefix: int = 4, visible_suffix: int = 2) -> str:
+def mask_secret(
+    secret: str, *, visible_prefix: int = 4, visible_suffix: int = 2
+) -> str:
     """Return a minimally exposed secret string for diagnostics."""
     if not secret:
         return ""

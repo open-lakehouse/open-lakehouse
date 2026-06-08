@@ -14,7 +14,11 @@ def validate_sql(sql: str, row_limit: int = 1000) -> dict[str, Any]:
     lowered = normalized_sql.lower()
 
     if not normalized_sql:
-        return {"is_valid": False, "reason": "SQL is empty.", "normalized_sql": normalized_sql}
+        return {
+            "is_valid": False,
+            "reason": "SQL is empty.",
+            "normalized_sql": normalized_sql,
+        }
 
     if any(token in lowered for token in BLOCKED_TOKENS):
         return {

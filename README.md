@@ -12,7 +12,7 @@ This repo is the demo-focused sibling of the upstream [lakehouse-stack](https://
 | Client transport | **Spark Connect** (gRPC, port 15002) | bundled with Spark 4.1 |
 | Streaming | Apache Kafka | 3.6 |
 | Orchestration | Apache Airflow | 3.1.6 |
-| Open table formats | Apache Iceberg / Delta Lake | 1.10 / 4.0.1 |
+| Open table formats | Apache Iceberg / Delta Lake | 1.10 / 4.2.0 |
 | Catalog | Unity Catalog OSS | 0.4.x |
 | Experiment tracking | MLflow | 3.12 |
 | Object store | SeaweedFS (S3-compatible) | — |

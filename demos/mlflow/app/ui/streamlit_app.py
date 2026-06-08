@@ -240,7 +240,9 @@ def _execute_sql(sql: str) -> dict[str, Any]:
         "execute_sql",
         sql=sql,
     )
-    if isinstance(result, dict) and ("dataframe" in result or "spark_dataframe" in result):
+    if isinstance(result, dict) and (
+        "dataframe" in result or "spark_dataframe" in result
+    ):
         return result
     return _placeholder_execute_sql(sql)
 
@@ -343,7 +345,9 @@ def main() -> None:
         else:
             validation = _validate_sql(sql_text)
             if not validation.get("is_valid", False):
-                st.error(f"SQL blocked: {validation.get('reason', 'Unknown validation failure')}")
+                st.error(
+                    f"SQL blocked: {validation.get('reason', 'Unknown validation failure')}"
+                )
                 _append_log(
                     "codex_logs",
                     f"SQL validation blocked execution: {validation.get('reason', 'unknown reason')}",
@@ -386,7 +390,9 @@ def main() -> None:
             meta_cols = st.columns(3)
             meta_cols[0].metric("Rows", execution_result.get("row_count", 0))
             meta_cols[1].metric("Runtime (ms)", execution_result.get("runtime_ms", 0))
-            meta_cols[2].metric("Tables Used", len(execution_result.get("tables_used", [])))
+            meta_cols[2].metric(
+                "Tables Used", len(execution_result.get("tables_used", []))
+            )
 
             dataframe = execution_result.get("dataframe")
             if isinstance(dataframe, pd.DataFrame):
@@ -399,7 +405,9 @@ def main() -> None:
     if eval_result:
         left, right = st.columns(2)
         left.write(f"**Query Quality:** {eval_result.get('query_quality', 'n/a')}")
-        left.write(f"**Correctness Score:** {eval_result.get('correctness_score', 'n/a')}")
+        left.write(
+            f"**Correctness Score:** {eval_result.get('correctness_score', 'n/a')}"
+        )
         right.write(f"**Safety Score:** {eval_result.get('safety_score', 'n/a')}")
         right.write(f"**Notes:** {eval_result.get('notes', 'n/a')}")
 
