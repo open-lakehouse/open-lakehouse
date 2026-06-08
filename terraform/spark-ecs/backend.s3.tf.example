@@ -1,0 +1,29 @@
+# Optional but recommended: store Terraform state in an encrypted, private S3
+# bucket instead of on local disk.
+#
+# How to enable:
+#   1. Create a private, versioned, encrypted state bucket:
+#        aws s3api create-bucket --bucket <you>-tfstate --region us-west-2 \
+#          --create-bucket-configuration LocationConstraint=us-west-2
+#        aws s3api put-bucket-versioning --bucket <you>-tfstate \
+#          --versioning-configuration Status=Enabled
+#        aws s3api put-bucket-encryption --bucket <you>-tfstate \
+#          --server-side-encryption-configuration \
+#          '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"}}]}'
+#        aws s3api put-public-access-block --bucket <you>-tfstate \
+#          --public-access-block-configuration \
+#          BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+#   2. Rename this file to backend.tf and fill in the bucket name.
+#   3. Migrate existing local state:
+#        terraform -chdir=terraform/spark-ecs init -migrate-state
+#   4. Delete the local terraform.tfstate / terraform.tfstate.backup files afterwards.
+#
+# terraform {
+#   backend "s3" {
+#     bucket       = "REPLACE-WITH-YOUR-PRIVATE-STATE-BUCKET"
+#     key          = "open-lakehouse/spark-ecs/terraform.tfstate"
+#     region       = "us-west-2"
+#     encrypt      = true
+#     use_lockfile = true # native S3 state locking (Terraform >= 1.10; no DynamoDB)
+#   }
+# }

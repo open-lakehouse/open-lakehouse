@@ -6,6 +6,9 @@ config/unity-catalog/server.properties
 .env
 .env.*
 !.env.example
+# Per-recipe Terraform env files (real values); only the .example is tracked.
+.env-terraform.*
+!.env-terraform.*.example
 .envrc
 credentials.env
 **/credentials*.env
