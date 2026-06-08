@@ -102,9 +102,7 @@ def start_query(
     if use_realtime:
         rt = spark._jvm.org.apache.spark.sql.streaming.Trigger.RealTime(RTM_INTERVAL)
         return writer._jwrite.trigger(rt).start()  # Real-Time Mode
-    return writer.trigger(
-        processingTime=MICROBATCH_INTERVAL
-    ).start()  # micro-batch
+    return writer.trigger(processingTime=MICROBATCH_INTERVAL).start()  # micro-batch
     # -------------------------------------------------------------------------
 
 
