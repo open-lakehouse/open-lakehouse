@@ -1,0 +1,10 @@
+# A deliberately BROKEN pipeline — gold_revenue references a table that doesn't
+# exist (typo: 'orderz'). `spark-pipelines dry-run` catches it before any data
+# moves. Self-contained (range source, local spark_catalog) — needs no UC.
+name: broken_demo
+catalog: spark_catalog
+schema: default
+storage: file:///tmp/broken-demo-storage
+libraries:
+  - glob:
+      include: transformations/**
