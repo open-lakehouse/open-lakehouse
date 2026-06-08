@@ -9,7 +9,7 @@ What concept this demo illustrates and why someone would run it. 2-3 sentences m
 ## Prereqs
 
 - Spark 4.1 + Connect server: `./lakehouse start all` (Connect is the default transport)
-- _(list other services this demo requires — Kafka, UC, MLflow, Airflow — and any data prep steps)_
+- _(list other services this demo requires - Kafka, UC, MLflow, Airflow - and any data prep steps)_
 - _(any environment variables that must be set in `.env`)_
 
 Transport: this demo uses `SparkSession.builder.remote("sc://localhost:15002")` (or reads `LAKEHOUSE_SPARK_REMOTE` from the env exported by the CLI). Override only if you have a reason.

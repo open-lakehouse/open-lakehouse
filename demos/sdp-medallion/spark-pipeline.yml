@@ -1,10 +1,13 @@
 name: sdp-medallion
-catalog: unity
-schema: bronze
+catalog: managed_demo
+# Per-presenter schema. The notebook rewrites this line to the presenter's
+# namespace (from DEMO_NS) before running, so concurrent presenters don't
+# collide on the same tables.
+schema: medallion_demo
 storage: file:///tmp/sdp-medallion-storage
 libraries:
   - glob:
       include: transformations/**
-# SDP inherits the cluster's spark-defaults.conf — Delta extensions, UC catalog,
-# S3 scheme handlers, warehouse dir. Don't repeat those here — they're static
+# SDP inherits the cluster's spark-defaults.conf - Delta extensions, UC catalog,
+# S3 scheme handlers, warehouse dir. Don't repeat those here - they're static
 # Spark configs and SDP can't re-set them at session time.

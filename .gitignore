@@ -2,6 +2,7 @@
 # Never commit live credentials. The `detect-secrets` pre-commit hook is a
 # second line of defense; this is the first.
 config/spark/spark-defaults.conf
+config/spark/spark-defaults.*.conf
 config/unity-catalog/server.properties
 .env
 .env.*

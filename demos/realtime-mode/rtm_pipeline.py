@@ -27,7 +27,7 @@ Configuration is read from environment variables:
     SHUFFLE_PARTITIONS       default: 8
     RTM_TRIGGER_INTERVAL     default: 5 seconds
     USE_REALTIME             default: 1 (set 0 to fall back to pure-Python
-                              trigger(processingTime="0 seconds") — useful
+                              trigger(processingTime="0 seconds") - useful
                               if RTM is unavailable on the running cluster)
 """
 
@@ -235,7 +235,7 @@ def main() -> int:
     )
 
     if USE_REALTIME:
-        # OSS Spark 4.1.0 — no native PySpark trigger(realTime=...) kwarg.
+        # OSS Spark 4.1.0 - no native PySpark trigger(realTime=...) kwarg.
         # Reach into the JVM for Trigger.RealTime and apply it on the
         # underlying Java DataStreamWriter, then start through the Java side
         # too (the Python writer's _jwrite is now configured).

@@ -1,0 +1,36 @@
+# Hosted Spark 4.1 defaults - rendered by entrypoint.sh (envsubst substitutes
+# ${UC_TOKEN}). Targets Scott's remote Unity Catalog (catalog: managed_demo);
+# S3 via the Fargate task IAM role.
+spark.sql.extensions                      org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,io.delta.sql.DeltaSparkSessionExtension
+
+# Unity Catalog (Scott's deployment) - catalog is 'managed_demo'. Tables are
+# catalog-managed Delta (the transforms set delta.feature.catalogManaged).
+spark.sql.catalog.managed_demo            io.unitycatalog.spark.UCSingleCatalog
+spark.sql.catalog.managed_demo.uri        https://uc.openlakehousedemos.dev
+spark.sql.catalog.managed_demo.token      ${UC_TOKEN}
+spark.sql.catalog.spark_catalog           org.apache.spark.sql.delta.catalog.DeltaCatalog
+
+# Iceberg REST (read-only) on the same UC.
+spark.sql.catalog.iceberg                 org.apache.iceberg.spark.SparkCatalog
+spark.sql.catalog.iceberg.catalog-impl    org.apache.iceberg.rest.RESTCatalog
+spark.sql.catalog.iceberg.uri             https://uc.openlakehousedemos.dev/api/2.1/unity-catalog/iceberg
+spark.sql.catalog.iceberg.warehouse       unity
+spark.sql.catalog.iceberg.token           ${UC_TOKEN}
+
+# Real AWS S3 - credentials from the Fargate task role. The EXPLICIT endpoint is
+# required: without it S3A signs for the wrong region and gets a 403.
+spark.hadoop.fs.s3a.endpoint              s3.us-west-2.amazonaws.com
+spark.hadoop.fs.s3a.endpoint.region       us-west-2
+spark.hadoop.fs.s3a.aws.credentials.provider com.amazonaws.auth.DefaultAWSCredentialsProviderChain
+spark.hadoop.fs.s3a.path.style.access     false
+spark.hadoop.fs.s3a.impl                  org.apache.hadoop.fs.s3a.S3AFileSystem
+spark.hadoop.fs.s3.impl                   org.apache.hadoop.fs.s3a.S3AFileSystem
+spark.hadoop.fs.AbstractFileSystem.s3.impl org.apache.hadoop.fs.s3a.S3A
+
+# All extra jars baked into the image (iceberg/delta/uc/hadoop-aws/kafka).
+spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/delta-spark_4.1_2.13-4.2.0.jar,/opt/spark/jars-extra/delta-storage-4.2.0.jar,/opt/spark/jars-extra/unitycatalog-spark_2.13-0.4.1.jar,/opt/spark/jars-extra/unitycatalog-client-0.4.1.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar,/opt/spark/jars-extra/spark-sql-kafka-0-10_2.13-4.1.0.jar,/opt/spark/jars-extra/spark-token-provider-kafka-0-10_2.13-4.1.0.jar,/opt/spark/jars-extra/kafka-clients-3.9.0.jar,/opt/spark/jars-extra/commons-pool2-2.12.0.jar
+
+# spark_catalog default DB - local path (catalog-managed tables don't use this;
+# pointing it at S3 trips the default-database creation on startup).
+spark.sql.warehouse.dir                   file:/tmp/spark-wh
+spark.sql.sources.default                 delta

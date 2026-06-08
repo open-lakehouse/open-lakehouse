@@ -1,12 +1,12 @@
 # sdp-medallion
 
-> Bronze → Silver → Gold built with Spark Declarative Pipelines, materialized as Delta tables in Unity Catalog OSS.
+> Bronze -> Silver -> Gold built with Spark Declarative Pipelines, materialized as Delta tables in Unity Catalog OSS.
 
 ## Purpose
 
 Shows the SDP runtime driving a three-stage medallion pipeline whose outputs
 register in Unity Catalog OSS as Delta tables. It is also the reference for the
-non-obvious `table_properties` pattern required to make SDP write to UC — see
+non-obvious `table_properties` pattern required to make SDP write to UC - see
 [`.claude/skills/sdp/unity-catalog.md`](../../.claude/skills/sdp/unity-catalog.md)
 for the full why.
 
@@ -39,7 +39,7 @@ driver). Not the standalone Connect server.
 ## Run
 
 The standalone Connect server (`spark-connect-41`) and SDP's embedded driver
-both bind port 15002 — stop the standalone one first.
+both bind port 15002 - stop the standalone one first.
 
 ```bash
 # 1. Free port 15002
@@ -100,7 +100,7 @@ bash demos/sdp-medallion/teardown.sh
 ```
 
 Drops the three UC tables and clears the pipeline storage. The Delta files
-under `s3://lakehouse/warehouse/sdp/` are left in place — delete that prefix
+under `s3://lakehouse/warehouse/sdp/` are left in place - delete that prefix
 with an S3 client for a fully clean slate (re-running over existing tables
 fails: UC's connector doesn't support truncate).
 
@@ -110,7 +110,7 @@ This demo exists partly to document them. All covered in detail in
 [`.claude/skills/sdp/unity-catalog.md`](../../.claude/skills/sdp/unity-catalog.md):
 
 - Transformations targeting UC **must be Python** (`@dp.materialized_view`),
-  not `.sql` — SDP rejects the SQL `LOCATION` clause.
+  not `.sql` - SDP rejects the SQL `LOCATION` clause.
 - Every UC-targeted table needs `table_properties={"location": "s3://...",
   "provider": "delta"}`. Both keys. `s3://` scheme, not `s3a://`.
-- Re-runs over an existing table fail (no truncate support) — teardown first.
+- Re-runs over an existing table fail (no truncate support) - teardown first.
