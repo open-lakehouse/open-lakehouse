@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# MLflow entrypoint that ensures its Postgres role and database exist,
-# then starts the tracking server. Safe to re-run; all DDL is IF NOT EXISTS.
+# MLflow entrypoint for the local stack. Ensures its Postgres role and database
+# exist, then starts the tracking server. Safe to re-run; all DDL is guarded.
+#
+# This is the simple local variant. The AWS deploy uses a richer entrypoint
+# (SNI TLS, managed-Postgres provisioning, S3 artifact proxying) that lives in
+# terraform/mlflow-ecs/docker/entrypoint.sh.
 set -euo pipefail
 
 PG_HOST="${POSTGRES_HOST:-localhost}"
@@ -38,7 +42,7 @@ else
 DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${MLFLOW_PG_USER}') THEN
-        CREATE ROLE ${MLFLOW_PG_USER} WITH LOGIN PASSWORD '${MLFLOW_PG_PASS}';
+        CREATE ROLE "${MLFLOW_PG_USER}" WITH LOGIN PASSWORD '${MLFLOW_PG_PASS}';
     END IF;
 END
 \$\$;
@@ -50,7 +54,7 @@ SQL
         PGPASSWORD="${PG_SUPERPASS}" psql \
             -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_SUPERUSER}" -d postgres \
             -v ON_ERROR_STOP=1 \
-            -c "CREATE DATABASE ${MLFLOW_PG_DB} OWNER ${MLFLOW_PG_USER};" || prov_ok=0
+            -c "CREATE DATABASE \"${MLFLOW_PG_DB}\" OWNER \"${MLFLOW_PG_USER}\";" || prov_ok=0
     fi
 
     if [[ "${prov_ok}" == "0" ]]; then
@@ -60,8 +64,8 @@ POSTGRES_USER='${PG_SUPERUSER}' lacks CREATEROLE/CREATEDB, or the db is
 unreachable. Provision once from a privileged session and restart:
 
     psql -U <superuser> -d postgres <<'SQL'
-    CREATE ROLE ${MLFLOW_PG_USER} WITH LOGIN PASSWORD '<password>';
-    CREATE DATABASE ${MLFLOW_PG_DB} OWNER ${MLFLOW_PG_USER};
+    CREATE ROLE "${MLFLOW_PG_USER}" WITH LOGIN PASSWORD '<password>';
+    CREATE DATABASE "${MLFLOW_PG_DB}" OWNER "${MLFLOW_PG_USER}";
     SQL
 
 EOF
