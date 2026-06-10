@@ -4,7 +4,7 @@ You are helping with **open-lakehouse**, a composable OSS lakehouse demo platfor
 
 ## Stack
 
-Spark 4.1 (Connect-first) · Kafka 3.6 · Airflow 3.1 · Delta 4.2 + Iceberg 1.10 (both extensions enabled) · Unity Catalog OSS 0.4.x · MLflow 3.1 · SeaweedFS (S3) · PostgreSQL.
+Spark 4.1 (Connect-first) · Kafka 3.6 · Airflow 3.1 · Delta 4.2 + Iceberg 1.10 (both extensions enabled) · Unity Catalog OSS 0.4.x · MLflow 3.13 · SeaweedFS (S3) · PostgreSQL.
 
 Catalogs (verified — see `.claude/skills/unity-catalog-oss/`):
 - `unity.<schema>.<table>` — Unity Catalog OSS via its Spark connector. **Delta only. Primary write path.**
@@ -67,7 +67,7 @@ For the full deterministic runbook, see `.claude/skills/lakehouse-lifecycle/star
 - Airflow 3.1.6
 - Unity Catalog OSS 0.4.1 (`newfrontdocker/unitycatalog:v0.4.1`)
 - Unity Catalog Spark connector 0.3.0
-- MLflow 3.1
+- MLflow 3.13 (image base `ghcr.io/mlflow/mlflow:v3.13.0-full`)
 - AWS SDK v2 2.24.6 (exact, for Hadoop 3.4.1 compatibility)
 
 ## Ports

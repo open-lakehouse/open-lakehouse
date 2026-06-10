@@ -15,7 +15,7 @@ services:
     build:
       context: .
       dockerfile: docker/mlflow/Dockerfile
-    image: lakehouse-mlflow:3.12.0
+    image: lakehouse-mlflow:3.13.0
     container_name: mlflow-server
     ports:
       - "5000:5000"

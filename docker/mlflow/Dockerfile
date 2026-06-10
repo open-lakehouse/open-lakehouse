@@ -1,10 +1,13 @@
-# MLflow 3.1 tracking server + AI Gateway.
+# MLflow tracking server + AI Gateway (local stack).
 #
-# The upstream ghcr.io/mlflow/mlflow image does not include psycopg2, so
-# pointing MLFLOW_BACKEND_STORE_URI at PostgreSQL crashes on boot. Layer
-# psycopg2-binary and boto3 on so the image can reach both the shared
-# Postgres catalog and the SeaweedFS S3 endpoint for artifacts.
-FROM ghcr.io/mlflow/mlflow:v3.1.0
+# The `-full` image variant bundles psycopg2-binary + boto3, so Postgres and S3
+# work out of the box. We add the postgresql-client (psql) CLI because the
+# entrypoint uses it to auto-provision the MLflow role + db against the local
+# Postgres container.
+#
+# The AWS deploy uses a separate image under terraform/mlflow-ecs/docker (psql 16
+# for SNI + the AWS entrypoint). Keep this one simple.
+FROM ghcr.io/mlflow/mlflow:v3.13.0-full
 
 USER root
 
@@ -12,10 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       postgresql-client \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir \
-      psycopg2-binary==2.9.9 \
-      boto3==1.35.0
 
 COPY docker/mlflow/entrypoint.sh /usr/local/bin/mlflow-entrypoint.sh
 RUN chmod +x /usr/local/bin/mlflow-entrypoint.sh

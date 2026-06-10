@@ -1,11 +1,11 @@
 ---
 name: mlflow
-description: MLflow 3.1 (tracking + AI Gateway) on this stack. Load when logging experiments from Spark/Python jobs, registering models, or wiring AI Gateway routes to Anthropic / Ollama for LLM-in-pipeline patterns.
+description: MLflow 3.13 (tracking + AI Gateway) on this stack. Load when logging experiments from Spark/Python jobs, registering models, or wiring AI Gateway routes to Anthropic / Ollama for LLM-in-pipeline patterns.
 ---
 
-# MLflow 3.1
+# MLflow 3.13
 
-Tracking server: `http://localhost:5000`. AI Gateway: `http://localhost:5001`. Both in `docker-compose-mlflow.yml`. Backend: PostgreSQL (`mlflow` database). Artifact store: SeaweedFS (`s3://mlflow/`).
+Tracking server: `http://localhost:5000`. AI Gateway: `http://localhost:5001`. Both in `docker-compose-mlflow.yml`. Backend: PostgreSQL (`mlflow` database). Artifact store: SeaweedFS (`s3://mlflow/`). Image base is `ghcr.io/mlflow/mlflow:v3.13.0-full` (the `-full` variant bundles `psycopg2-binary` + `boto3`, so Postgres and S3 work without a custom pip layer).
 
 ## Tracking client
 
