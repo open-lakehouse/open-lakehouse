@@ -447,6 +447,7 @@ class TestU59InventoryExcludesOverlays:
             "spark-logs",
             "postgres-data",
             "seaweedfs-data",
+            "delta-sharing-certs",
         }
 
 
@@ -759,3 +760,41 @@ class TestU62ArtifactFreeRunsUnflagged:
             "artifact run_known=yes name=s3://b/mlflow-artifacts/1/live/artifacts/f\n"
         )
         assert rows == []
+
+
+class TestSharingQuiescedOnReset:
+    """Delta Sharing reads warehouse/sharing/, so reset must quiesce it (and
+    restart it via share_restore), while never entering `start all` / `stop all`."""
+
+    def test_running_set_includes_sharing(self):
+        body = _func_body("reset_running_services")
+        assert "delta-sharing" in body
+        assert 'up="$up sharing"' in body
+
+    def test_quiesce_stops_sharing_all_modes(self):
+        body = _func_body("reset_quiesce")
+        for mode in ("data)", "metadata)", "all)"):
+            seg = body.split(mode, 1)[1].split(";;", 1)[0]
+            assert "sharing" in seg, f"sharing missing from reset_quiesce {mode}"
+
+    def test_quiesce_containers_for_sharing(self):
+        body = _func_body("quiesce_containers_for")
+        assert "sharing)" in body and "delta-sharing" in body
+
+    def test_cmd_stop_has_sharing_arm(self):
+        assert "sharing)" in _func_body("cmd_stop")
+
+    def test_start_has_no_sharing_arm(self):
+        # sharing is not startable via the CLI dispatch (restore uses share_restore),
+        # so `start all` / `start sharing` never bring it up.
+        assert "sharing)" not in _func_body("cmd_start")
+
+    def test_sharing_not_in_stop_all_validset(self):
+        body = _func_body("cmd_stop")
+        assert "mlflow|notebooks)" in body  # shared valid-set unchanged
+        assert "mlflow|notebooks|sharing)" not in body  # not appended to stop-all
+
+    def test_certs_volume_still_never(self):
+        body = _func_body("reset_volume_mode")
+        seg = body.split("delta-sharing-certs)", 1)[1].split(";;", 1)[0]
+        assert '"never"' in seg

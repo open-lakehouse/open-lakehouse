@@ -1,0 +1,14 @@
+# Test overlay for docker-compose-sharing.yml — see tests/overlays/README.md.
+# delta-sharing is already bridge on lakehouse-network (like Unity Catalog); isolate
+# by run-scoped container name + the shared default network, and drop the published
+# 8443 (the test stack reaches it in-network — no host port by default, §1.17.1;
+# LAKEHOUSE_PORT_OFFSET only if a checkpoint needs host reachability).
+services:
+  delta-sharing:
+    container_name: delta-sharing-${LAKEHOUSE_RESOURCE_SUFFIX}
+    # Base publishes 8443; drop it — reached in-network under the run-scoped project.
+    ports: !reset null
+    # Base is bridge on lakehouse-network; move onto the shared default network so
+    # the run-scoped stack can talk. !override replaces the list rather than merging.
+    networks: !override
+      - default

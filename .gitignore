@@ -122,3 +122,6 @@ docker-compose.override.yml
 
 # Backup artifacts produced by `./lakehouse backup` / pre-restore snapshots
 /backups/
+
+# Delta Sharing client profile written by `./lakehouse share` (holds a bearer token)
+lakehouse.share

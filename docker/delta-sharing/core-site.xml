@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+<configuration>
+    <!-- S3A Configuration for SeaweedFS (internal Docker network) -->
+    <property>
+        <name>fs.s3a.endpoint</name>
+        <value>http://seaweedfs:8333</value>
+    </property>
+    <property>
+        <name>fs.s3a.access.key</name>
+        <value>__S3_ACCESS_KEY__</value>
+    </property>
+    <property>
+        <name>fs.s3a.secret.key</name>
+        <value>__S3_SECRET_KEY__</value>
+    </property>
+    <property>
+        <name>fs.s3a.path.style.access</name>
+        <value>true</value>
+    </property>
+    <property>
+        <name>fs.s3a.connection.ssl.enabled</name>
+        <value>false</value>
+    </property>
+    <property>
+        <name>fs.s3a.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+    </property>
+    <property>
+        <name>fs.s3a.aws.credentials.provider</name>
+        <value>org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider</value>
+    </property>
+    <property>
+        <name>fs.s3a.endpoint.region</name>
+        <value>us-east-1</value>
+    </property>
+    <property>
+        <name>fs.s3a.change.detection.mode</name>
+        <value>none</value>
+    </property>
+    <property>
+        <name>fs.s3a.signing-algorithm</name>
+        <value>AWSS3V4SignerType</value>
+    </property>
+
+    <!-- Force S3 client to use custom endpoint for ALL operations including pre-signing -->
+    <property>
+        <name>fs.s3.endpoint</name>
+        <value>http://seaweedfs:8333</value>
+    </property>
+
+    <property>
+        <name>fs.s3n.endpoint</name>
+        <value>http://seaweedfs:8333</value>
+    </property>
+</configuration>

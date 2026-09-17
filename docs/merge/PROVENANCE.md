@@ -46,3 +46,30 @@ stale lifecycle CLI.
 CP-derived material ported in later checkpoints (the `terraform/spark-ecs` advertise-address
 pattern for T-1.3, `make cache-deps` antecedents, the MinIO→SeaweedFS substitution) must carry
 `Co-authored-by` trailers and be noted here as it lands.
+
+---
+
+## Phase 4 — Delta Sharing (`feat/merge-sharing`)
+
+**Branch base:** `feat/merge-sharing` is cut from the PR #13 trunk
+`feat/net-bridge-conversion` @ `f72ff2f` (per `docs/merge/PR-fan-strategy.md`).
+
+Ported from the containerized-lakehouse platform `docker/delta-sharing/` (the OpenSharing
+reference server + `url-rewriter-proxy.py` + configs) and `tests/docker/test_url_rewriter.py`,
+rewritten for the open-lakehouse stack. The verbatim import commit carries `Co-authored-by`
+trailers to the CP authors; the SeaweedFS adaptation is Isaac's.
+
+| CP source | Ported to | Key reworking |
+|---|---|---|
+| `docker/delta-sharing/*` | `docker/delta-sharing/*` | Verbatim import (normalized to repo style: black/ruff), then repointed. |
+| MinIO endpoint `minio:9000` | `seaweedfs:8333` | `server.yaml` hadoopConf + `core-site.xml` (fs.s3a/fs.s3/fs.s3n). |
+| CP env/placeholders `MINIO_ENDPOINT`, `MINIO_PUBLIC_SCHEME`, `__MINIO_*__` | `S3_PUBLIC_ENDPOINT`, `S3_PUBLIC_SCHEME`, `__S3_*__` | Matches the `seaweedfs-ops` skill; no MinIO exists here. |
+| CP shared tables (notebook-produced retail-gold + streaming/crypto_rates on `lakehouse-data`) | `sales_by_region`, `daily_revenue` on `s3a://lakehouse/warehouse/sharing/` | Replaced with a **self-contained seed** (`scripts/sharing/seed_shared_tables.py`) writing path-based Delta at fixed prefixes — verifiable in isolation, no notebook dependency. |
+| CP public-endpoint-first sharing (`scripts/start-sharing.sh`) | **local-first** (`S3_PUBLIC_ENDPOINT=localhost:8333`) | The `./lakehouse share` CLI serves locally out of the box; a public HTTPS endpoint is an override, and how it's exposed is out of scope for this repo. |
+| CP `docker-compose.yml` delta-sharing service | `docker-compose-sharing.yml` | Bridge network; loopback-bound 8443 (D6); no cross-file `depends_on`. |
+
+The upstream **T-4.8** presigned-URL signer bug (`delta-io/delta-sharing#753`, fix PR `#965`
+stalled) — the reason the re-signing proxy exists — is documented in the `delta-sharing` skill.
+
+**Not in this PR (deferred follow-up):** folding the CP Delta Sharing *notebooks* (T-5.4) into
+`demos/delta-sharing/` — that lands after both this PR and the Demos PR merge.

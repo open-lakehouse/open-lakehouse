@@ -1,0 +1,82 @@
+# Delta Sharing server + URL-rewriter proxy (Phase 4).
+#
+# Serves the tables declared in docker/delta-sharing/server.yaml over the Delta
+# Sharing protocol on HTTPS 8443. The proxy re-signs the OpenSharing server's
+# presigned URLs for this stack's SeaweedFS S3 endpoint (the T-4.8 upstream-signer
+# workaround — see docker/delta-sharing/url-rewriter-proxy.py and the
+# delta-sharing skill).
+#
+# Usage (via the CLI, which sequences storage + seed first):
+#   ./lakehouse share start          # build + up, wait healthy, write the profile
+#   ./lakehouse share status
+#   ./lakehouse share stop
+#
+# Prereqs: storage (SeaweedFS) up, and the shared tables seeded
+# (`./lakehouse share seed`, which needs Spark Connect). The seed writes external
+# Delta to s3a://lakehouse/warehouse/sharing/{sales_by_region,daily_revenue}/.
+#
+# There is deliberately NO `depends_on: seaweedfs` — storage lives in a separate
+# compose file (docker-compose-storage.yml), so a cross-file depends_on would make
+# a plain `docker compose -f docker-compose-sharing.yml up` fail with "undefined
+# service". The CLI guarantees ordering instead (mirrors mlflow/airflow).
+
+services:
+  delta-sharing:
+    build:
+      context: ./docker/delta-sharing
+      dockerfile: Dockerfile
+      args:
+        # Public defaults; a package proxy is supplied only at invocation
+        # (--build-arg / env), never committed. Harmonized across Dockerfiles in
+        # the Offline PR (Phase 6, T-6.2).
+        DELTA_SHARING_VERSION: ${DELTA_SHARING_VERSION:-1.3.10}
+        MAVEN_REPO_URL: ${MAVEN_REPO_URL:-https://repo1.maven.org/maven2}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    image: lakehouse-delta-sharing:1.3.10
+    container_name: delta-sharing
+    hostname: delta-sharing
+    restart: unless-stopped
+    ports:
+      # Host-facing HTTPS. Bind to loopback by default (D6 posture: never expose
+      # the sharing server on all interfaces unless the operator opts in).
+      - "${BIND_HOST:-127.0.0.1}:${DELTA_SHARING_PORT:-8443}:8443"
+    environment:
+      # S3 credentials the S3A client + the proxy's signer use. Default to the
+      # stack's SeaweedFS demo creds; override in .env.
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse_s3}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse_s3_secret}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      # The public S3 endpoint the CLIENT reaches. Default = the host-published
+      # SeaweedFS port, so sharing works locally with no tunnel. For external
+      # sharing, set S3_PUBLIC_ENDPOINT to a tunnel host and S3_PUBLIC_SCHEME=https.
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-localhost:8333}
+      S3_PUBLIC_SCHEME: ${S3_PUBLIC_SCHEME:-http}
+      # Bearer token recipients present. Rendered with ":-" so `docker compose
+      # config` works without a local .env (CI). Empty mints a random token at
+      # startup (entrypoint) rather than running open.
+      DELTA_SHARING_TOKEN: ${DELTA_SHARING_TOKEN:-}
+    volumes:
+      # Mount the share config read-only so shares can be edited without a rebuild.
+      - ./docker/delta-sharing/server.yaml:/opt/delta-sharing/conf/server.yaml:ro
+      - ./docker/delta-sharing/log4j.properties:/opt/delta-sharing/conf/log4j.properties:ro
+      # Persist the self-signed cert across restarts.
+      - delta-sharing-certs:/opt/delta-sharing/certs
+    healthcheck:
+      # The proxy answers HTTPS on 8443; an unauthenticated /shares returns 401
+      # (server up, token required) which is the healthy signal here.
+      test:
+        - "CMD-SHELL"
+        - "curl -ks -o /dev/null -w '%{http_code}' https://localhost:8443/delta-sharing/ | grep -q '401\\|200'"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - lakehouse-network
+
+networks:
+  lakehouse-network:
+    driver: bridge
+
+volumes:
+  delta-sharing-certs:

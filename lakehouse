@@ -500,6 +500,7 @@ cmd_status_json() {
     local airflow_web=$(is_container_running "$(resolve_container_name airflow-webserver)" && echo "true" || echo "false")
     local airflow_sched=$(is_container_running "$(resolve_container_name airflow-scheduler)" && echo "true" || echo "false")
     local mlflow_ok=$(is_container_running "$(resolve_container_name mlflow)" && echo "true" || echo "false")
+    local sharing_ok=$(is_container_running "$(resolve_container_name delta-sharing)" && echo "true" || echo "false")
 
     cat <<EOF
 {
@@ -508,7 +509,8 @@ cmd_status_json() {
     "postgresql": $pg_ok,
     "seaweedfs": $s3_ok,
     "unity_catalog": $uc_ok,
-    "mlflow": $mlflow_ok
+    "mlflow": $mlflow_ok,
+    "delta_sharing": $sharing_ok
   },
   "spark": {
     "version": "4.1",
@@ -575,6 +577,9 @@ cmd_status_human() {
     echo -e "\n${YELLOW}MLflow:${NC}"
     check_container "$mlflow_ct" && check_service mlflow 5000 "MLflow Tracking" || true
 
+    echo -e "\n${YELLOW}Delta Sharing (opt-in):${NC}"
+    check_container "$(resolve_container_name delta-sharing)" || true
+
     echo -e "\n${YELLOW}Ports:${NC}"
     echo "  PostgreSQL:       5432"
     echo "  SeaweedFS:        8333"
@@ -585,6 +590,7 @@ cmd_status_human() {
     echo "  Zookeeper:        2181"
     echo "  Airflow:          8085 (UI)"
     echo "  MLflow:           5000 (Tracking), 5001 (AI Gateway)"
+    echo "  Delta Sharing:    8443 (HTTPS, opt-in via 'share')"
 
     echo -e "\n${YELLOW}Configurations:${NC}"
     echo "  Storage:         docker-compose-storage.yml"
@@ -593,6 +599,7 @@ cmd_status_human() {
     echo "  Unity Catalog:   docker-compose-unity-catalog.yml"
     echo "  Airflow:         docker-compose-airflow.yml"
     echo "  MLflow:          docker-compose-mlflow.yml"
+    echo "  Delta Sharing:   docker-compose-sharing.yml"
     echo "  Spark conf:      config/spark/spark-defaults.conf"
 }
 
@@ -931,6 +938,19 @@ cmd_stop() {
             echo -e "${YELLOW}Stopping notebooks (Jupyter)...${NC}"
             overlay_set_compose_args notebooks || return 1
             docker compose "${OVERLAY_COMPOSE_ARGS[@]}" down
+            ;;
+    esac
+
+    case $service in
+        sharing)
+            # Internal arm for reset quiescence (reset_stop_services -> cmd_stop sharing).
+            # Delta Sharing's primary interface is `./lakehouse share`; this is
+            # deliberately NOT in `stop all` nor the usage list. Return early so it
+            # never reaches the shared valid-set below (keeping stop-all + usage as-is).
+            echo -e "${YELLOW}Stopping Delta Sharing...${NC}"
+            overlay_set_compose_args sharing || return 1
+            docker compose "${OVERLAY_COMPOSE_ARGS[@]}" down
+            return 0
             ;;
     esac
 
@@ -1588,6 +1608,11 @@ reset_volume_mode() {
         # services ARE quiesced (uc-data, mlflow-data, spark-data) remain removable.
         postgres-data)         echo "never" ;;
         seaweedfs-data)        echo "never" ;;
+        # delta-sharing-certs holds only the self-signed cert, regenerated at
+        # startup. delta-sharing is an opt-in service reset does not quiesce, so
+        # (like the storage volumes) never `docker volume rm` it — a wipe would
+        # fail "in use" when sharing is up, and is pointless (the cert regenerates).
+        delta-sharing-certs)   echo "never" ;;
         spark-data|spark-logs) echo "data,all" ;;      # job scratch + event logs
         *)                     echo "data,all" ;;      # default: data-plane scratch
     esac
@@ -1860,6 +1885,10 @@ reset_running_services() {
     # it must be in the restart set too — else a running Jupyter is left stopped after
     # a successful reset. cmd_start now has a `notebooks` arm to bring it back.
     is_container_running "$(resolve_container_name jupyter)" && up="$up notebooks" || true
+    # Delta Sharing reads warehouse/sharing/ (and the whole warehouse prefix), so
+    # reset_quiesce stops it; include it in the restart set too. Restore is
+    # special-cased in reset_restore_services (no re-mint, no --build).
+    is_container_running "$(resolve_container_name delta-sharing)" && up="$up sharing" || true
     echo "$up"
     return 0
 }
@@ -1875,6 +1904,7 @@ quiesce_containers_for() {
         mlflow)        resolve_container_name mlflow ;;
         airflow)       echo "$(resolve_container_name airflow-webserver) $(resolve_container_name airflow-scheduler) $(resolve_container_name airflow-triggerer)" ;;
         notebooks)     resolve_container_name jupyter ;;
+        sharing)       resolve_container_name delta-sharing ;;
     esac
 }
 
@@ -1904,9 +1934,9 @@ reset_stop_services() {
 # registrations are cleared via REST), so UC is not in the --data set.
 reset_quiesce() {
     case "$1" in
-        data)     reset_stop_services spark kafka mlflow airflow notebooks ;;
-        metadata) reset_stop_services unity-catalog mlflow airflow notebooks ;;
-        all)      reset_stop_services spark kafka unity-catalog mlflow airflow notebooks ;;
+        data)     reset_stop_services spark kafka mlflow airflow notebooks sharing ;;
+        metadata) reset_stop_services unity-catalog mlflow airflow notebooks sharing ;;
+        all)      reset_stop_services spark kafka unity-catalog mlflow airflow notebooks sharing ;;
     esac
 }
 
@@ -1914,6 +1944,13 @@ reset_quiesce() {
 reset_restore_services() {
     local s
     for s in $1; do
+        # Delta Sharing restarts WITHOUT minting a new token or rebuilding —
+        # share_restore reuses the existing token (env / profile) and `up -d` only.
+        if [ "$s" = "sharing" ]; then
+            echo -e "${YELLOW}Restarting sharing...${NC}"
+            share_restore >/dev/null 2>&1 || echo -e "  ${YELLOW}!${NC} delta-sharing did not come back cleanly; check ./lakehouse status"
+            continue
+        fi
         echo -e "${YELLOW}Restarting ${s}...${NC}"
         cmd_start "$s" >/dev/null 2>&1 || echo -e "  ${YELLOW}!${NC} ${s} did not come back cleanly; check ./lakehouse status"
     done
@@ -2994,6 +3031,130 @@ cmd_resolve() {
     done
 }
 
+# ---------------------------------------------------------------------------
+# Delta Sharing (Phase 4). Opt-in demo service — deliberately NOT part of
+# `start all`: the OpenSharing server + the url-rewriter proxy on HTTPS 8443.
+# The proxy RE-SIGNS the server's presigned URLs for SeaweedFS (the T-4.8
+# upstream-signer workaround — see the delta-sharing skill). The client profile
+# is written to $LAKEHOUSE_SHARING_PROFILE (default ./lakehouse.share).
+# ---------------------------------------------------------------------------
+SHARING_PROFILE="${LAKEHOUSE_SHARING_PROFILE:-$PROJECT_ROOT/lakehouse.share}"
+share_endpoint() { echo "https://localhost:${DELTA_SHARING_PORT:-8443}/delta-sharing"; }
+
+# Read the bearer token from the running delta-sharing container (the source of
+# truth when `share start` minted a random one that isn't in the caller's env).
+# Works because the CLI start path injects DELTA_SHARING_TOKEN via Compose, so it
+# is a real container env var visible to printenv.
+share_container_token() {
+    docker exec "$(resolve_container_name delta-sharing)" \
+        printenv DELTA_SHARING_TOKEN 2>/dev/null || true
+}
+
+# Restart delta-sharing after a reset WITHOUT minting a new token or rebuilding
+# (reset_restore_services special-cases this). Reuse DELTA_SHARING_TOKEN from the
+# env, else the bearerToken from $LAKEHOUSE_SHARING_PROFILE; if neither exists,
+# skip — letting the entrypoint mint a token the host can't reproduce would strand
+# `share profile`.
+share_restore() {
+    local token="${DELTA_SHARING_TOKEN:-}"
+    if [ -z "$token" ] && [ -f "$SHARING_PROFILE" ]; then
+        token=$(python3 -c "import json;print(json.load(open('$SHARING_PROFILE')).get('bearerToken',''))" 2>/dev/null || true)
+    fi
+    if [ -z "$token" ]; then
+        echo -e "  ${YELLOW}!${NC} delta-sharing not restarted: no DELTA_SHARING_TOKEN and no profile token to reuse — start it with './lakehouse share start'." >&2
+        return 0
+    fi
+    export DELTA_SHARING_TOKEN="$token"
+    overlay_set_compose_args sharing || return 1
+    docker compose "${OVERLAY_COMPOSE_ARGS[@]}" up -d
+}
+
+share_write_profile() {
+    # Delta Sharing client profile. The token must match what the container runs
+    # with (DELTA_SHARING_TOKEN, exported before `up`).
+    local token="$1"
+    cat > "$SHARING_PROFILE" <<EOF
+{
+  "shareCredentialsVersion": 1,
+  "endpoint": "$(share_endpoint)",
+  "bearerToken": "$token"
+}
+EOF
+    chmod 600 "$SHARING_PROFILE"
+    echo -e "${GREEN}✓${NC} Wrote sharing profile: ${BLUE}${SHARING_PROFILE}${NC}"
+    echo -e "  ${YELLOW}Note:${NC} the server uses a self-signed cert — clients must trust it"
+    echo -e "  (or skip TLS verification) for https://localhost:${DELTA_SHARING_PORT:-8443}."
+}
+
+cmd_share() {
+    local subcmd="${1:-start}"
+    case "$subcmd" in
+        seed)
+            header "SEEDING SHARED TABLES"
+            # The seed clears its S3 prefix (boto3 -> SeaweedFS) BEFORE Spark runs,
+            # so storage must be up too — else it dies with a raw botocore error.
+            if ! is_service_healthy 8333; then
+                echo -e "${RED}✗${NC} SeaweedFS (storage) not up — run './lakehouse start storage' first" >&2
+                return 1
+            fi
+            if ! is_service_healthy "$(get_spark_connect_port)"; then
+                echo -e "${RED}✗${NC} Spark Connect not listening — run './lakehouse start spark' first" >&2
+                return 1
+            fi
+            poetry run python "$PROJECT_ROOT/scripts/sharing/seed_shared_tables.py"
+            ;;
+        start)
+            header "STARTING DELTA SHARING"
+            if ! is_service_healthy 8333; then
+                echo -e "${RED}✗${NC} SeaweedFS (storage) not up — run './lakehouse start storage' first" >&2
+                return 1
+            fi
+            # Ensure a known bearer token so the written profile matches the server.
+            # If unset, mint one host-side and pass it to the container — never let
+            # the container mint a random token the host can't know.
+            local token="${DELTA_SHARING_TOKEN:-$(openssl rand -hex 16)}"
+            export DELTA_SHARING_TOKEN="$token"
+            echo -e "  ${YELLOW}Reminder:${NC} the shared tables must be seeded once — './lakehouse share seed'."
+            overlay_set_compose_args sharing || return 1
+            echo -e "${YELLOW}Starting Delta Sharing (building the image if needed)...${NC}"
+            docker compose "${OVERLAY_COMPOSE_ARGS[@]}" up -d --build
+            # `curl -sk`: -s satisfies wait_for_service's command allowlist; -k is
+            # required for the server's self-signed cert.
+            wait_for_service "Delta Sharing" "curl -sk https://localhost:${DELTA_SHARING_PORT:-8443}/delta-sharing/" 120
+            share_write_profile "$token"
+            echo -e "${GREEN}Delta Sharing serving at: $(share_endpoint)${NC}"
+            ;;
+        stop)
+            header "STOPPING DELTA SHARING"
+            overlay_set_compose_args sharing || return 1
+            docker compose "${OVERLAY_COMPOSE_ARGS[@]}" down
+            ;;
+        status)
+            if is_container_running "$(resolve_container_name delta-sharing)"; then
+                echo -e "${GREEN}✓${NC} delta-sharing running"
+                curl -ks -o /dev/null -w "  HTTP %{http_code} from $(share_endpoint)\n" "$(share_endpoint)/" || true
+            else
+                echo -e "${RED}✗${NC} delta-sharing not running"
+            fi
+            ;;
+        profile)
+            # Resolve the token from the env, else read it back from the running
+            # container — so `share profile` works in a fresh shell even when
+            # `share start` minted a random token (which lives only in the container).
+            local token="${DELTA_SHARING_TOKEN:-$(share_container_token)}"
+            if [ -z "$token" ]; then
+                echo -e "${RED}✗${NC} No token: set DELTA_SHARING_TOKEN, or start the server first ('./lakehouse share start')" >&2
+                return 1
+            fi
+            share_write_profile "$token"
+            ;;
+        *)
+            echo "Usage: lakehouse share [seed|start|stop|status|profile]"
+            return 1
+            ;;
+    esac
+}
+
 cmd_help() {
     cat <<'EOF'
 open-lakehouse — demo platform CLI
@@ -3026,6 +3187,7 @@ Commands:
   restore --from <p>  Restore from a backup artifact (fail-stop; --yes to skip prompt,
                         --force to restore a MANIFEST whose targets differ from this stack)
   doctor              Report orphaned data / catalog inconsistencies
+  share <cmd>         Delta Sharing (seed|start|stop|status|profile) — HTTPS 8443
   help                Show this help
 
 Services:
@@ -3033,8 +3195,9 @@ Services:
   spark          Apache Spark 4.1 cluster (ports 7078, UI 8082)
   kafka          Kafka 3.6 + Zookeeper
   airflow        Apache Airflow 3.1 (UI 8085)
-  unity-catalog  Unity Catalog OSS 0.4.x (REST API 8081)
-  mlflow         MLflow 3.1 (tracking 5000, AI gateway 5001)
+  unity-catalog  Unity Catalog OSS 0.5.0 (REST API 8081)
+  mlflow         MLflow 3.14 (tracking 5000, AI gateway 5001)
+  delta-sharing  Delta Sharing server + re-signing proxy (HTTPS 8443) — via `share`, opt-in
   all            Spark + Kafka (start storage, unity-catalog, airflow, mlflow individually)
 
 Catalog: Unity Catalog OSS only. No JDBC-catalog mode. UC provides:
@@ -3108,6 +3271,7 @@ case ${1:-help} in
     backup)       cmd_backup "${@:2}" ;;
     restore)      cmd_restore "${@:2}" ;;
     doctor)       cmd_doctor "${@:2}" ;;
+    share)        cmd_share "${@:2}" ;;
     __resolve)    cmd_resolve ;;
     help|*)       cmd_help ;;
 esac

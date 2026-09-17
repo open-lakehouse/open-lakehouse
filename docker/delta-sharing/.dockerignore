@@ -1,0 +1,29 @@
+# Version control
+.git
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+
+# Environment and secrets
+.env
+.env.*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Logs
+*.log

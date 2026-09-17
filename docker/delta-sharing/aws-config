@@ -1,0 +1,5 @@
+[default]
+s3 =
+    endpoint_url = __S3_PUBLIC_URL__
+    signature_version = s3v4
+    addressing_style = path
