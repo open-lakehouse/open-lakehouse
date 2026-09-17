@@ -46,7 +46,7 @@ OTHER_RUNID = "otherrun"
 BASE_SERVICES = {
     "spark41": ["spark-master-41", "spark-worker-41", "spark-connect-41"],
     "kafka": ["zookeeper", "kafka"],
-    "unity-catalog": ["unity-catalog"],
+    "unity-catalog": ["unity-catalog", "unity-catalog-ui"],
     "airflow": [
         "airflow-init",
         "airflow-webserver",

@@ -1,0 +1,10 @@
+# Test overlay for docker-compose-dashboard.yml — see tests/overlays/README.md.
+services:
+  dashboard:
+    container_name: dashboard-${LAKEHOUSE_RESOURCE_SUFFIX}
+    # Base publishes 127.0.0.1:3000:3000; drop it — reached in-network under test.
+    ports: !reset null
+    # Base is bridge on lakehouse-network; move onto the shared run-scoped default
+    # network. !override replaces the list rather than merging with the base's.
+    networks: !override
+      - default

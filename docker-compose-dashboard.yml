@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: Apache-2.0
+# Read-only web dashboard for the open-lakehouse platform (Phase 3).
+#
+# A Next.js viewer over Unity Catalog, MLflow, SeaweedFS, and (optionally) Delta
+# Sharing. Binds to 127.0.0.1:3000 and is OPT-IN: it is deliberately NOT started
+# by `./lakehouse start all`. Start it with:
+#     ./lakehouse start dashboard        # first run builds the Next.js image
+#
+# Build behind a proxy (public npm is unreachable on some networks — the build
+# args are supplied only at invocation; the committed defaults stay public):
+#     NPM_REGISTRY=<npm proxy> NPM_STRICT_SSL=false ./lakehouse start dashboard
+#
+# Code-execution features (the Pipelines + Notebooks pages, /api/jupyter-exec,
+# /api/pipelines/run, and the pipeline write/delete routes) ship DISABLED. Turn
+# them on ONLY on a trusted, non-exposed local network:
+#     DASHBOARD_ALLOW_CODE_EXECUTION=true ./lakehouse start dashboard
+
+services:
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+        NPM_STRICT_SSL: ${NPM_STRICT_SSL:-true}
+    image: open-lakehouse-dashboard:latest
+    container_name: dashboard
+    # Least-privilege exposure: loopback only (§1.34.1). It is a read-only viewer
+    # by default, but never publish it on all interfaces.
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Bridge service endpoints (server-side; reached over lakehouse-network).
+      # HARDCODED to the in-network service names on purpose — these must NOT
+      # inherit the host-oriented values in the repo .env (e.g. S3_ENDPOINT there
+      # is http://localhost:8333 for host clients, which is wrong inside the
+      # container). Only credentials/bucket/tokens/flag are env-driven below.
+      UNITY_CATALOG_URL: http://unity-catalog:8080
+      MLFLOW_URL: http://mlflow-server:5000
+      S3_ENDPOINT: http://seaweedfs:8333
+      S3_BUCKET: ${S3_BUCKET:-lakehouse}
+      JUPYTER_URL: http://jupyter:8888
+      DELTA_SHARING_URL: https://delta-sharing:8443
+      # S3 credentials — match the SeaweedFS static credentials (storage compose).
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse_s3}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse_s3_secret}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      # Optional — only consulted when the matching optional service is running
+      # or when code-execution is enabled. Empty by default.
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
+      DELTA_SHARING_TOKEN: ${DELTA_SHARING_TOKEN:-}
+      PIPELINES_DIR: ${PIPELINES_DIR:-/app/pipelines}
+      # Accept the Delta Sharing server's self-signed cert (dev only). The store
+      # and catalog are plain HTTP; the only TLS peer is delta-sharing.
+      NODE_TLS_REJECT_UNAUTHORIZED: "0"
+      # D6 / T-3.8: code-execution (RCE) + write routes and the Pipelines/Notebooks
+      # pages are DISABLED by default. "true" only on a trusted, non-exposed host.
+      DASHBOARD_ALLOW_CODE_EXECUTION: ${DASHBOARD_ALLOW_CODE_EXECUTION:-false}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - lakehouse-network
+
+networks:
+  lakehouse-network:
+    driver: bridge

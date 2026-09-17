@@ -25,7 +25,7 @@
 
 # The base compose files the CLI itself dispatches — the "active base set"
 # (plan 1.16.6). Overlays (*.test.yml) are never part of this set.
-OVERLAY_BASE_SERVICES=(spark41 kafka unity-catalog airflow mlflow notebooks)
+OVERLAY_BASE_SERVICES=(spark41 kafka unity-catalog airflow mlflow notebooks dashboard)
 
 # Run-id format gate (plan 1.16.1 / 1.18.8).
 overlay_runid_valid() {

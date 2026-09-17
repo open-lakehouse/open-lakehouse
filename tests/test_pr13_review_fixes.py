@@ -425,10 +425,12 @@ class TestNotebooksLifecycle:
         assert re.search(
             r"\n\s+notebooks\)\s*\n", body
         ), "cmd_start needs a notebooks) arm"
-        assert (
-            "|mlflow|notebooks)" in body
+        assert re.search(
+            r"\|mlflow\|notebooks[|)]", body
         ), "notebooks must be in the cmd_start valid-set"
-        assert "notebooks|all]" in body, "the start usage string should list notebooks"
+        assert re.search(
+            r"notebooks\|[\w|-]*all\]", body
+        ), "the start usage string should list notebooks"
 
     def test_start_notebooks_is_optin_not_in_all(self):
         body = self._body("cmd_start")

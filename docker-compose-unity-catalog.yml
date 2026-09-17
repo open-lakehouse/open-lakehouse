@@ -67,22 +67,31 @@ services:
       start_period: 30s
     restart: unless-stopped
     networks:
-      - lakehouse-network
+      lakehouse-network:
+        # The UC OSS web UI's dev-server proxy targets the hostname `server`
+        # (hardcoded in the UI image; it does NOT honor UC_API_URL). Expose the
+        # UC API under that in-network alias so the UI can reach it. Other
+        # services still address UC as `unity-catalog` as before.
+        aliases:
+          - server
 
-  # Optional: Unity Catalog Web UI
-  # Uncomment to enable the graphical interface
-  # unity-catalog-ui:
-  #   image: unitycatalog/unitycatalog-ui:0.4.0
-  #   container_name: unity-catalog-ui
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - UC_API_URL=http://unity-catalog:8080
-  #   depends_on:
-  #     unity-catalog:
-  #       condition: service_healthy
-  #   networks:
-  #     - lakehouse-network
+  # Unity Catalog OSS web UI (the official graphical interface). Remapped to host
+  # port 3001 because the UI serves on container port 3000, which the dashboard
+  # already publishes. Browse it at http://localhost:3001.
+  # NOTE: the UC UI publishes no versioned release — only rolling `main` builds.
+  # Pin to a specific main build for reproducibility (there is no 0.5.0 UI tag).
+  unity-catalog-ui:
+    image: unitycatalog/unitycatalog-ui:main-aadc6fc
+    container_name: unity-catalog-ui
+    ports:
+      - "3001:3000"
+    # The UI's dev-server proxy reaches the UC API via the `server` network alias
+    # on the unity-catalog service above; this build honors no API-URL env var.
+    depends_on:
+      unity-catalog:
+        condition: service_healthy
+    networks:
+      - lakehouse-network
 
 volumes:
   uc-data:

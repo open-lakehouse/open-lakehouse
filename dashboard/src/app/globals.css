@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-dark text-slate-100 antialiased;
+  }
+  h1,
+  h2 {
+    @apply tracking-tight;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-white/[0.06] bg-surface p-6;
+  }
+  .btn-primary {
+    @apply rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover;
+  }
+  /* Small uppercase magenta section label (openlakehouse.io "eyebrow"). */
+  .eyebrow {
+    @apply mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent;
+  }
+  /* Magenta rounded-square icon badge, as on openlakehouse.io category cards. */
+  .icon-badge {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white;
+    background-image: linear-gradient(135deg, #d950e2, #b6206b);
+  }
+  /* The brand gradient (purple -> magenta -> pink -> deep pink). */
+  .brand-gradient {
+    background-image: linear-gradient(
+      90deg,
+      #7c2183 0%,
+      #d950e2 33%,
+      #f471b3 66%,
+      #b6206b 100%
+    );
+  }
+  .brand-gradient-text {
+    background-image: linear-gradient(90deg, #d950e2, #f471b3);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  /* Soft purple + teal radial wash behind the page hero, as on openlakehouse.io. */
+  .hero-glow {
+    background-image:
+      radial-gradient(120% 80% at 50% 0%, rgba(106, 31, 111, 0.45), rgba(0, 0, 0, 0) 60%),
+      radial-gradient(90% 70% at 82% 8%, rgba(5, 140, 173, 0.22), rgba(0, 0, 0, 0) 55%);
+  }
+  .table-header {
+    @apply bg-surface-dark px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400;
+  }
+  .table-cell {
+    @apply whitespace-nowrap px-4 py-3 text-sm text-slate-300;
+  }
+}
+
+.notebook-html-output table {
+  @apply w-full border-collapse text-xs;
+}
+.notebook-html-output th {
+  @apply border border-slate-700 bg-slate-800 px-3 py-1.5 text-left font-medium text-slate-300;
+}
+.notebook-html-output td {
+  @apply border border-slate-700/50 px-3 py-1.5 text-slate-400;
+}
+.notebook-html-output tr:hover td {
+  @apply bg-slate-800/50;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #080a17;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a2f4a;
+  border-radius: 3px;
+}

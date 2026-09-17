@@ -12,3 +12,10 @@ services:
     # rather than merging with the base's [lakehouse-network].
     networks: !override
       - default
+  # The UC web UI ships in the base compose; run-scope it and drop its host port
+  # so parallel test runs don't collide (it need not be functional under test).
+  unity-catalog-ui:
+    container_name: unity-catalog-ui-${LAKEHOUSE_RESOURCE_SUFFIX}
+    ports: !reset null
+    networks: !override
+      - default

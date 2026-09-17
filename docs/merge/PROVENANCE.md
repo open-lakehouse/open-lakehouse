@@ -46,3 +46,37 @@ stale lifecycle CLI.
 CP-derived material ported in later checkpoints (the `terraform/spark-ecs` advertise-address
 pattern for T-1.3, `make cache-deps` antecedents, the MinIO→SeaweedFS substitution) must carry
 `Co-authored-by` trailers and be noted here as it lands.
+
+## Phase 3 — Dashboard (`feat/merge-dashboard`, sibling PR)
+
+Ported the containerized-lakehouse-platform **frontend** (Next.js 15 / React 19 / TS 5.7 /
+Tailwind 3.4, `output: standalone`, Vitest 3.0) into `dashboard/`, with its Vitest suite from
+CP `tests/frontend/` → `dashboard/tests/`. The verbatim import is one commit (CP-attributed
+`Co-authored-by` trailers: Charlotte Blankenberg); the repoint, the T-3.7 fix, and the D6
+feature flag are separate commits so the risky diff reads on its own.
+
+Source → destination:
+
+| CP source | open-lakehouse | Reworking |
+|---|---|---|
+| `frontend/` | `dashboard/` | verbatim import, then repoint |
+| `frontend/src/app/api/minio/[...path]` | `dashboard/src/app/api/storage/[...path]` | renamed; `MINIO_URL`→`S3_ENDPOINT` (`seaweedfs:8333`) |
+| (new) | `dashboard/src/app/api/health/storage` | HEAD-bucket probe (SeaweedFS has no `/minio/health/live`) |
+| (new) | `dashboard/src/lib/features.ts`, `src/app/api/features`, `src/components/code-exec-guard.tsx` | D6 feature-flag plumbing |
+| `tests/frontend/**` | `dashboard/tests/**` | verbatim; vitest `include` repointed to `./tests/**` |
+
+Reworkings of note:
+- **Repoint (T-3.2/3.3/3.4):** MinIO→SeaweedFS (`seaweedfs:8333`), `mlflow-server:5000`,
+  `unity-catalog:8080`; bucket `lakehouse-data`→`${S3_BUCKET:-lakehouse}`; client "open UI"
+  links → host ports (UC 8081, MLflow 5000, Spark UI 8082, Jupyter 8889, Sharing 8443);
+  MinIO-console links dropped (SeaweedFS has no console).
+- **T-3.7 (security):** `POST /api/pipelines` containment gained a trailing-separator
+  boundary (`isInsidePipelinesDir`), closing the sibling-dir escape a bare
+  `startsWith(base)` admitted. CP's own test that asserted `../../../etc/passwd` was allowed
+  is inverted (F-08).
+- **D6 / T-3.8:** the code-execution / write routes and the Pipelines + Notebooks pages ship
+  **disabled** behind `DASHBOARD_ALLOW_CODE_EXECUTION` (default false), a documented demo
+  toggle with loud warnings when enabled.
+- **Neutrality (D8):** separate `docker-compose-dashboard.yml`, opt-in CLI arm, never started
+  by `start all`. The sharing page's "external access" section was genericized (no
+  cloudflared / tunnel specifics; `make share*` → `./lakehouse share *`).
