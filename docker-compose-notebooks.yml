@@ -20,6 +20,9 @@ services:
     build:
       context: .
       dockerfile: docker/jupyter/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
     image: lakehouse-jupyter:spark-4.1.0
     container_name: jupyter
     user: root

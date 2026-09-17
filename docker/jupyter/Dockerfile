@@ -21,12 +21,18 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 # work unchanged; override at build time on networks that require an internal
 # mirror:  docker build --build-arg PIP_INDEX_URL=<mirror>/simple ...
 ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=
 
-RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" --upgrade "pip>=24.0" setuptools wheel
+RUN set --; \
+    if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
+      --upgrade "pip>=24.0" setuptools wheel
 # jupyterlab + pyspark, plus the Python deps `spark-pipelines` (the SDP CLI)
 # imports — the stock apache/spark:4.1.0 image ships none of these, so without
 # them `pyspark/pipelines/cli.py` fails with ModuleNotFoundError (§1.6, T-1.13).
-RUN pip install --no-cache-dir --index-url "$PIP_INDEX_URL" \
+RUN set --; \
+    if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
       jupyterlab==4.3.0 \
       ipykernel==6.29.5 \
       pyspark==4.1.0 \

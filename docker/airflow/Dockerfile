@@ -1,6 +1,10 @@
 # Airflow 3.1.6 with Python 3.12
 FROM apache/airflow:3.1.6-python3.12
 
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=
+ARG SPARK_DIST_URL=https://archive.apache.org/dist/spark/spark-4.1.0/spark-4.1.0-bin-hadoop3.tgz
+
 USER root
 
 # Install system dependencies
@@ -18,7 +22,7 @@ ENV PATH="${JAVA_HOME}/bin:${PATH}"
 # Download and install Spark (for spark-submit)
 ENV SPARK_VERSION=4.1.0
 ENV SPARK_HOME=/opt/spark
-RUN curl -fsSL "https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/spark-${SPARK_VERSION}-bin-hadoop3.tgz" \
+RUN curl -fsSL "$SPARK_DIST_URL" \
     | tar -xz -C /opt/ \
     && mv /opt/spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
     && chown -R airflow:root ${SPARK_HOME}
@@ -28,13 +32,15 @@ ENV PATH="${SPARK_HOME}/bin:${PATH}"
 USER airflow
 
 # Install Airflow providers (latest versions compatible with Airflow 3.x)
-RUN pip install --no-cache-dir \
-    apache-airflow-providers-apache-spark==5.5.0 \
-    apache-airflow-providers-postgres==5.14.0 \
-    apache-airflow-providers-apache-kafka==1.8.0 \
-    apache-airflow-providers-docker==3.14.0 \
-    apache-airflow-providers-http==5.6.3 \
-    pyspark==4.1.0
+RUN set --; \
+    if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
+      apache-airflow-providers-apache-spark==5.5.0 \
+      apache-airflow-providers-postgres==5.14.0 \
+      apache-airflow-providers-apache-kafka==1.8.0 \
+      apache-airflow-providers-docker==3.14.0 \
+      apache-airflow-providers-http==5.6.3 \
+      pyspark==4.1.0
 
 # Create directories
 RUN mkdir -p /opt/airflow/dags /opt/airflow/logs /opt/airflow/config

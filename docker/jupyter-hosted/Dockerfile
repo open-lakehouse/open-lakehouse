@@ -15,8 +15,16 @@ ENV VIRTUAL_ENV=/opt/jupyter-venv
 RUN python3 -m venv "$VIRTUAL_ENV"
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-RUN pip install --no-cache-dir --upgrade "pip>=24.0" setuptools wheel
-RUN pip install --no-cache-dir \
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=
+
+RUN set --; \
+    if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
+      --upgrade "pip>=24.0" setuptools wheel
+RUN set --; \
+    if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
+    pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
       jupyterlab==4.3.0 ipykernel==6.29.5 pyspark==4.1.0 \
       pandas==2.2.3 pyarrow==18.1.0 matplotlib==3.9.2 "httpx<0.28" \
       pyyaml grpcio grpcio-status protobuf zstandard kafka-python
