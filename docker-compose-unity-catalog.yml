@@ -1,8 +1,8 @@
-# Unity Catalog OSS v0.4.0 — the catalog for this stack.
+# Unity Catalog OSS v0.5.0 — the catalog for this stack.
 #
 # Provides:
 # - REST API for Iceberg tables (read-only via Iceberg REST, full CRUD via UC API)
-# - Catalog-managed commits (UC coordinates multi-engine writes)
+# - Catalog-managed Delta tables (delta.feature.catalogManaged) under a catalog storage_root
 # - Credential vending via external locations
 # - Storage credentials API (AWS IAM role support)
 # - Multi-format support (Delta, Iceberg via UniForm)
@@ -13,27 +13,34 @@
 # Usage:
 #   docker compose -f docker-compose-unity-catalog.yml up -d
 #
-# Then configure Spark to use Unity Catalog REST endpoint:
-#   spark.sql.catalog.iceberg.uri = http://localhost:8080/api/2.1/unity-catalog/iceberg
+# Then configure Spark to use the Unity Catalog REST endpoint. Spark runs on the
+# bridge, so it uses the in-network service name (host 8081 -> container 8080):
+#   spark.sql.catalog.iceberg.uri = http://unity-catalog:8080/api/2.1/unity-catalog/iceberg
+# (From the host, the same endpoint is http://localhost:8081/api/2.1/unity-catalog/iceberg.)
 #
-# New in 0.4.0:
-#   - Catalog-managed commits: set server.managed-table.enabled=true in server.properties
+# Capabilities relied on here:
+#   - Catalog-managed Delta: a catalog with a storage_root assigns table locations,
+#     so SQL `.sql` SDP transformations materialize without an explicit LOCATION
+#     (see demos/sdp-medallion and .claude/skills/sdp/unity-catalog.md)
 #   - External locations API: POST /api/2.1/unity-catalog/external-locations
 #   - Storage credentials API: POST /api/2.1/unity-catalog/credentials
 #   - Managed storage on catalogs/schemas (storage_root parameter)
-#   - UniForm improvements (Delta-to-Iceberg atomic metadata updates)
+#   - Iceberg writes are NOT supported on any UC OSS build (0.4.x and 0.5.0
+#     alike reject data_source_format=ICEBERG) — this catalog is Delta-write /
+#     Iceberg-read-only (see CLAUDE.md, §1.12).
 
 services:
   unity-catalog:
-    # newfrontdocker/unitycatalog:v0.4.1 is an OFFICIAL STAGING image (Docker Hub:
-    # "used to test containers before publishing in unitycatalog/unitycatalog"),
-    # published by a UC committer — NOT a community fork. We use it only because
-    # official Docker Hub never shipped a v0.4.1 container (its tags jump v0.4.0 ->
-    # v0.5.0). It adds NO Iceberg write support — neither does official 0.5.0; UC OSS
-    # 0.4.x rejects data_source_format=ICEBERG outright, so this catalog is Delta-only
-    # for writes and Iceberg-read-only (see CLAUDE.md). Moving to a mounted uc-data
-    # volume / a UC upgrade is PR #1 — do not change the image here.
-    image: newfrontdocker/unitycatalog:v0.4.1
+    # Official, canonical UC image (PR #13 / T-1.17, D2). Replaced the earlier
+    # personal pre-publish staging artifact (a personal Docker Hub namespace with
+    # one v0.4.1 tag and no retention guarantee) with the canonical, versioned,
+    # retained release. The v0.5.0 win is catalog-managed
+    # Delta (delta.feature.catalogManaged), which unlocks SQL `.sql` SDP
+    # transformations. It adds NO Iceberg write support — 0.4.x and 0.5.0 both
+    # reject data_source_format=ICEBERG (measured, §1.12), so this catalog stays
+    # Delta-write / Iceberg-read-only (see CLAUDE.md). v0.5.1 is released on
+    # GitHub but has no official container yet — do not bump past 0.5.0.
+    image: unitycatalog/unitycatalog:v0.5.0
     container_name: unity-catalog
     ports:
       - "8081:8080"      # REST API + Iceberg REST Catalog endpoint (8081 host, SeaweedFS uses 8080)
@@ -44,7 +51,11 @@ services:
       - type: bind
         source: ./config/unity-catalog/server.properties
         target: /home/unitycatalog/etc/conf/server.properties
-      #- uc-data:/home/unitycatalog/etc/db
+      # uc-data mounted (PR #13 / T-1.20b): persists UC's embedded H2 store to a
+      # named volume so backup/restore can cover it via the volume rather than a
+      # docker cp of an ephemeral container layer. UC stays on embedded H2 — this
+      # only makes that state durable; it does NOT point UC at PostgreSQL.
+      - uc-data:/home/unitycatalog/etc/db
       - uc-logs:/home/unitycatalog/etc/logs
     healthcheck:
       # The image ships busybox wget, NOT curl — a curl-based check can never pass and

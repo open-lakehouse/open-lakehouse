@@ -27,6 +27,9 @@ repos:
         exclude: 'jars/.*'
       - id: check-merge-conflict
       - id: check-yaml
+        # --unsafe: syntax-only check without tag construction, so Docker Compose
+        # custom merge tags (!override / !reset in tests/overlays/*.test.yml) parse.
+        args: ['--unsafe']
         exclude: 'config/.*'
       - id: end-of-file-fixer
       - id: trailing-whitespace
@@ -55,7 +58,7 @@ repos:
     rev: 25.1.0
     hooks:
       - id: black
-        language_version: python3.11
+        language_version: python3
 
   # Python linting
   - repo: https://github.com/astral-sh/ruff-pre-commit

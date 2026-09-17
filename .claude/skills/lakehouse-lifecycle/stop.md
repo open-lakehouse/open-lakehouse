@@ -5,31 +5,40 @@ Goal: bring everything down cleanly, and know exactly what survives.
 ## Default — quick stop (preserves what is on a mounted volume)
 
 ```bash
-./lakehouse stop all            # Spark + Kafka
+./lakehouse stop all            # Spark + Kafka ONLY
+./lakehouse stop storage        # PostgreSQL + SeaweedFS (NOT included in `stop all`)
 ./lakehouse stop unity-catalog
 ./lakehouse stop airflow
 ./lakehouse stop mlflow
 ```
 
-This runs `docker compose down` for each compose file. Containers are removed but
-persistent state survives a restart: MLflow runs on the `mlflow-data` named volume,
-and Airflow DAG history in the host PostgreSQL `airflow` database (the Airflow compose
-file mounts only `./logs` and `./data`, and declares no named volume — its metadata
-lives in Postgres, not a Compose volume).
+> **Asymmetry to know:** `./lakehouse start all` brings storage up first, but
+> `./lakehouse stop all` stops only Spark + Kafka — it deliberately leaves the
+> storage services (and their volumes) running so a subsequent `start` inherits a
+> warm metastore/object store. Stop storage explicitly with `./lakehouse stop
+> storage` when you want it down.
 
-**Caveat — Unity Catalog does NOT survive today.** The `uc-data` volume is declared but
-**not mounted** (see `docker-compose-unity-catalog.yml`), so UC keeps its H2 catalog in the
-container's writable layer. Plain `down` removes the container and therefore **loses all UC
-catalog metadata** (catalogs, schemas, table registrations). If you need UC state to persist
-across a stop, take a backup first (below). (Mounting `uc-data` is planned for a later PR.)
+This runs `docker compose down` for each compose file. Containers are removed but
+**all persistent state survives a restart**, because it lives in named volumes and
+the Composed `postgres` service (PR #13):
+- databases (UC / MLflow / Airflow / `iceberg_catalog`) → `postgres-data`;
+- object data (every Delta table, MLflow artifacts) → `seaweedfs-data`;
+- UC's embedded H2 catalog → `uc-data` (now **mounted**, see
+  `docker-compose-unity-catalog.yml` — UC metadata persists across a plain stop);
+- MLflow local state → `mlflow-data`; Spark event logs → `spark-data`.
+
+Plain `down` (no `-v`) removes only containers and networks; none of the above is lost.
 
 To restart later, follow [start.md](start.md) from Step 3.
 
 ## Start fresh — use `./lakehouse reset`, not `down -v`
 
 When the user asks to "reset", "clean up", or "start fresh", use the reset command — it
-confirms, supports `--dry-run`, and **actually resets the databases and object store**, which
-`down -v` cannot do (host PostgreSQL and SeaweedFS are not reset by removing Compose volumes).
+confirms, supports `--dry-run`, and resets the databases + object store **surgically**.
+**Do NOT use `docker compose down -v`.** Since storage is Composed (PR #13), `-v` now
+**wipes `postgres-data`, `seaweedfs-data`, and `uc-data`** — i.e. every database, all
+object data, and the UC catalog — in one unconfirmed, unrecoverable step. `reset` is the
+safe, granular alternative (and it can preserve MLflow, dry-run, and back up first).
 
 ```bash
 ./lakehouse reset --all --dry-run     # preview every target, destroys nothing
@@ -51,18 +60,20 @@ inconsistencies remain.
 
 ## Why raw `docker compose down -v` is the wrong tool here
 
-`-v` removes only **Compose-managed named volumes**. On this stack that means it:
+`-v` removes **Compose-managed named volumes**. Since storage moved into Compose (PR #13),
+those volumes now hold **everything**, so `-v` is far more destructive than it used to be:
 
-- does **not** touch **host PostgreSQL** (port 5432) — UC/MLflow/Airflow *metadata* rows
-  persist, so the next `start` inherits stale catalog state;
-- does **not** touch **SeaweedFS** object bytes — SeaweedFS keeps objects in its own
-  filer/volume store, not in PostgreSQL and not in a Compose volume on a stock install, so
-  every Delta/Iceberg file under `s3://lakehouse/warehouse/` survives;
-- **does** delete the MLflow/Airflow volumes it does manage.
+- wipes **`postgres-data`** — every database (UC / MLflow / Airflow / `iceberg_catalog`), so
+  all catalog and tracking metadata is gone;
+- wipes **`seaweedfs-data`** — the whole object store, i.e. every Delta/Iceberg file under
+  `s3://lakehouse/warehouse/` and all MLflow artifacts;
+- wipes **`uc-data`** (UC's embedded H2 store), **`mlflow-data`**, and **`spark-data`** too.
 
-Net effect: `down -v` produces a **half-wiped, internally inconsistent** environment —
-exactly what `./lakehouse reset` exists to prevent. Never reach for `down -v` to "start
-fresh".
+Before PR #13 storage was host-installed and out of `-v`'s reach, so `-v` could only reach a
+subset and produced a **half-wiped, internally inconsistent** environment. Now it destroys
+the lot in one unconfirmed, unrecoverable step. Either way, `down -v` is the wrong tool:
+`./lakehouse reset` (confirms, `--dry-run`, backs up, granular `--data`/`--metadata`) is the
+right one. Never reach for `down -v` to "start fresh".
 
 ## Verifying nothing is left running
 

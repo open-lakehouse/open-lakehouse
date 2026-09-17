@@ -45,10 +45,11 @@ user's `home` per `/etc/passwd`). The fix is to pre-download:
 spark-submit. Connect-mode jobs pick them up from `spark.jars` in
 `spark-defaults.conf` if you add them there.
 
-The broker is `localhost:9092` from inside `spark-master-41` — host network,
-not the docker-compose default of `kafka:9092`. Same applies to producers
-running on the host. Spark Kafka source code samples in this skill use
-`kafka:9092` in places — substitute `localhost:9092` for this stack.
+Kafka has **dual advertised listeners** on the `lakehouse-network` bridge:
+`kafka:9092` (internal) and `localhost:9092` (external). So from inside
+`spark-master-41` (and any in-network job) use **`kafka:9092`**; from the
+**host** (or a host-side producer) use `localhost:9092`. The Spark Kafka samples
+in this skill use `kafka:9092`, which is correct for in-container jobs.
 
 ## Spark Structured Streaming reader
 
@@ -115,7 +116,10 @@ For larger volumes use the testdata streamer:
 
 ## Connect from outside Docker
 
-The compose maps `9092:9092` so host clients can reach Kafka via `localhost:9092`. The advertised listener is `PLAINTEXT://localhost:9092` for that reason. From inside the docker network, use `kafka:9092`.
+Kafka advertises **two listeners**: `INTERNAL://kafka:9092` (for in-network
+clients) and `EXTERNAL://localhost:9092` (published to the host). Host clients
+connect to `localhost:9092`; in-network clients (Spark, Airflow, other
+containers) use `kafka:9092`.
 
 ## Common pitfalls
 

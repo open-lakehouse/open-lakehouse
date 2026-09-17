@@ -45,7 +45,7 @@ class TestUnityCatalogConfiguration:
         assert "test" in uc_service["healthcheck"]
 
     def test_docker_compose_port_mapping(self):
-        """Unity Catalog should expose port 8080."""
+        """Unity Catalog should expose port 8081."""
         compose_file = ROOT_DIR / "docker-compose-unity-catalog.yml"
         with open(compose_file) as f:
             config = yaml.safe_load(f)
@@ -182,21 +182,21 @@ class TestUnityCatalogLive:
         import urllib.error
         import urllib.request
 
-        # Check if Unity Catalog API specifically responds (not just port 8080)
-        url = "http://localhost:8080/api/2.1/unity-catalog/catalogs"
+        # Check if Unity Catalog API specifically responds (not just port 8081)
+        url = "http://localhost:8081/api/2.1/unity-catalog/catalogs"
         try:
             with urllib.request.urlopen(url, timeout=3) as response:
                 if response.status != 200:
                     pytest.skip("Unity Catalog not responding correctly")
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-            pytest.skip("Unity Catalog not running on port 8080")
+            pytest.skip("Unity Catalog not running on port 8081")
 
     def test_unity_catalog_api_responds(self):
         """Unity Catalog REST API should respond."""
         import json
         import urllib.request
 
-        url = "http://localhost:8080/api/2.1/unity-catalog/catalogs"
+        url = "http://localhost:8081/api/2.1/unity-catalog/catalogs"
         try:
             with urllib.request.urlopen(url, timeout=5) as response:
                 data = json.loads(response.read())
@@ -209,7 +209,7 @@ class TestUnityCatalogLive:
         import urllib.error
         import urllib.request
 
-        url = "http://localhost:8080/api/2.1/unity-catalog/iceberg/v1/config"
+        url = "http://localhost:8081/api/2.1/unity-catalog/iceberg/v1/config"
         try:
             with urllib.request.urlopen(url, timeout=5) as response:
                 assert response.status == 200
@@ -219,3 +219,150 @@ class TestUnityCatalogLive:
                 pytest.fail(f"Iceberg endpoint error: {e}")
         except urllib.error.URLError as e:
             pytest.fail(f"Iceberg endpoint failed: {e}")
+
+
+# =================================================================================
+# PR #13 / D2 gates — UC 0.5.0 upgrade (I-44, I-47) + round-trip (I-08)
+# =================================================================================
+
+import json  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+import uuid  # noqa: E402
+
+UC_API = "http://localhost:8081/api/2.1/unity-catalog"
+MASTER = "spark-master-41"
+
+
+def _uc_up() -> bool:
+    try:
+        with urllib.request.urlopen(f"{UC_API}/catalogs", timeout=3) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def _post(path: str, body: dict):
+    req = urllib.request.Request(
+        f"{UC_API}/{path}",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return r.status, r.read().decode()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode()
+
+
+def _master_running() -> bool:
+    try:
+        out = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.split()
+        return MASTER in out
+    except Exception:
+        return False
+
+
+@pytest.mark.integration
+class TestUC050Gates:
+    """Live D2 gates against the official unitycatalog/unitycatalog:v0.5.0 image."""
+
+    @pytest.fixture(autouse=True)
+    def _require_uc(self):
+        if not _uc_up():
+            pytest.skip("Unity Catalog not reachable on localhost:8081")
+
+    def test_i47_uc_rejects_iceberg_format(self):
+        # Pins §1.12: no UC OSS build accepts ICEBERG as a table format.
+        code, body = _post(
+            "tables",
+            {
+                "name": "t_ice",
+                "catalog_name": "unity",
+                "schema_name": "default",
+                "table_type": "EXTERNAL",
+                "data_source_format": "ICEBERG",
+                "columns": [
+                    {
+                        "name": "id",
+                        "type_text": "int",
+                        "type_name": "INT",
+                        "position": 0,
+                        "nullable": True,
+                    }
+                ],
+                "storage_location": "s3://lakehouse/warehouse/_iceberg_probe",
+            },
+        )
+        assert code == 400, f"UC must 400 on ICEBERG, got {code}: {body[:200]}"
+        assert "DataSourceFormat" in body or "ICEBERG" in body
+
+    def test_i47_iceberg_rest_has_no_table_write_endpoint(self):
+        # The Iceberg REST adapter is read-only: creating a namespace/table via it
+        # must be rejected (no 2xx). Proves §1.12's "no POST write endpoints".
+        req = urllib.request.Request(
+            f"{UC_API}/iceberg/v1/namespaces",
+            data=json.dumps({"namespace": ["probe"]}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                assert r.status not in (
+                    200,
+                    201,
+                ), f"Iceberg REST unexpectedly accepted a namespace create ({r.status})"
+        except urllib.error.HTTPError as e:
+            # 404/405/501/401/403/400 all confirm "no working write endpoint".
+            assert e.code >= 400, f"unexpected status {e.code}"
+
+    @pytest.mark.skipif(not _master_running(), reason=f"{MASTER} not running")
+    def test_i44_i08_catalog_schema_delta_roundtrip(self, tmp_path):
+        # I-44: create catalog/schema/Delta table + credential-vended write on v0.5.0.
+        # I-08: read it back via the UC Spark connector.
+        sfx = uuid.uuid4().hex[:8]
+        cat, sch = "unity", f"i44_{sfx}"
+        _post("schemas", {"name": sch, "catalog_name": cat})
+        script = f"""
+        from pyspark.sql import SparkSession
+        s = SparkSession.builder.appName("i44").master("local[2]").config("spark.ui.enabled","false").getOrCreate()
+        s.sparkContext.setLogLevel("ERROR")
+        t = "{cat}.{sch}.orders"
+        s.sql(f"CREATE TABLE IF NOT EXISTS {{t}} (id BIGINT, v BIGINT) USING delta LOCATION 's3://lakehouse/warehouse/i44/{sfx}'")
+        s.sql(f"INSERT INTO {{t}} VALUES (1,10),(2,20),(3,30)")
+        n = s.sql(f"SELECT count(*) FROM {{t}}").collect()[0][0]
+        print(f"I44 count={{n}}")
+        assert n == 3
+        print("I44_PASS")
+        s.stop()
+        """
+        f = tmp_path / "i44.py"
+        import textwrap
+
+        f.write_text(textwrap.dedent(script))
+        subprocess.run(
+            ["docker", "cp", str(f), f"{MASTER}:/tmp/_i44.py"],
+            check=True,
+            capture_output=True,
+        )
+        out = subprocess.run(
+            ["docker", "exec", MASTER, "/opt/spark/bin/spark-submit", "/tmp/_i44.py"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        ).stdout
+        # cleanup the UC table registration
+        try:
+            req = urllib.request.Request(
+                f"{UC_API}/tables/{cat}.{sch}.orders", method="DELETE"
+            )
+            urllib.request.urlopen(req, timeout=8)
+        except Exception:
+            pass
+        assert "I44_PASS" in out, f"UC 0.5.0 Delta round-trip failed:\n{out[-1500:]}"

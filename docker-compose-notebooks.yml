@@ -6,7 +6,8 @@
 #
 # Usage:
 #   docker compose -f docker-compose-notebooks.yml up -d --build
-#   # Open http://localhost:8889 (no token required)
+#   # Open http://localhost:8889/?token=<JUPYTER_TOKEN> (a token is REQUIRED — D5;
+#   # set JUPYTER_TOKEN in .env, or an empty value mints a random one, never open)
 #   docker compose -f docker-compose-notebooks.yml down
 #
 # Notebooks run Spark in local mode. For cluster execution, connect to the
@@ -21,11 +22,32 @@ services:
       dockerfile: docker/jupyter/Dockerfile
     image: lakehouse-jupyter:spark-4.1.0
     container_name: jupyter
-    network_mode: "host"
     user: root
+    ports:
+      - "8889:8889"
+    environment:
+      # Token auth (T-1.14 / D5). Supply a real value in .env. The image CMD
+      # requires ?token=<JUPYTER_TOKEN> for the Lab UI; if this is empty it mints
+      # a RANDOM token (still not open) rather than running tokenless — so access
+      # never regresses to the old --ServerApp.token= posture. Rendered with a
+      # ":-" default so `docker compose config` works without a local .env (CI).
+      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-}
     volumes:
       - ./notebooks:/home/jovyan/notebooks
       - ./scripts:/home/jovyan/scripts
       - ./data:/home/jovyan/data
       - ./jars:/home/jovyan/jars
+      - ./demos/sdp-medallion:/home/jovyan/pipelines/sdp-medallion:ro
     working_dir: /home/jovyan/notebooks
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8889/api"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - lakehouse-network
+
+networks:
+  lakehouse-network:
+    driver: bridge

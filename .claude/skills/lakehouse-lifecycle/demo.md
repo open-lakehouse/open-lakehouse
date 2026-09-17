@@ -33,7 +33,9 @@ cat demos/<name>/README.md
 The teardown in a demo's `teardown.sh` removes only what that demo created (its S3
 prefix, its tables/topics). To wipe the **whole** environment between demos, or to
 protect state you care about, use the lifecycle commands rather than `docker compose
-down -v` (which cannot reset host PostgreSQL or SeaweedFS — see [stop.md](stop.md)):
+down -v` (which — since storage is Composed, PR #13 — now wipes `postgres-data`,
+`seaweedfs-data`, and `uc-data` wholesale: every database, all object data, and the UC
+catalog, in one unconfirmed step — see [stop.md](stop.md)):
 
 ```bash
 # Snapshot everything first if the state matters (pg_dump per DB + S3 + volumes + UC H2).

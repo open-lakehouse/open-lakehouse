@@ -22,10 +22,11 @@ submits the streaming job into `spark-master-41` via `spark-submit` (long-
 running streams + Connect don't compose cleanly). Verification reads the
 output topics with `kafka-console-consumer` inside the Kafka container.
 
-The stack runs Spark + Kafka on the **host network**, so the Kafka bootstrap
-is `localhost:9092` from inside `spark-master-41` - *not* `kafka:9092`. The
-producer and the streaming job both read `KAFKA_BOOTSTRAP_SERVERS`; pass it
-explicitly per the Run section.
+The stack runs on the shared `lakehouse-network` bridge, so from inside
+`spark-master-41` the Kafka bootstrap is **`kafka:9092`** (service name). From
+the **host**, Kafka's external listener is `localhost:9092`. The producer and the
+streaming job read `KAFKA_BOOTSTRAP_SERVERS`; the in-container default is
+`kafka:9092`.
 
 `spark-submit` (and any `spark-pipelines run`) must run as `-u root` - the
 default `spark` user has `home=/nonexistent` and Ivy / checkpoint dirs trip
@@ -79,7 +80,8 @@ Created topic ethereum-validated-quarantine.
 ```bash
 # Step 3: Submit the RTM streaming job into the Spark master container.
 # Copy the pipeline in, then spark-submit it with the pre-downloaded Kafka
-# connector jars and the right Kafka bootstrap for this stack's host network.
+# connector jars. From inside the Spark container the bootstrap is kafka:9092
+# (the in-network service name on lakehouse-network).
 docker cp demos/realtime-mode/rtm_pipeline.py spark-master-41:/tmp/rtm_pipeline.py
 
 KJARS='/opt/spark/jars-extra/spark-sql-kafka-0-10_2.13-4.1.0.jar'
@@ -87,7 +89,7 @@ KJARS+=',/opt/spark/jars-extra/spark-token-provider-kafka-0-10_2.13-4.1.0.jar'
 KJARS+=',/opt/spark/jars-extra/kafka-clients-3.9.0.jar'
 KJARS+=',/opt/spark/jars-extra/commons-pool2-2.12.0.jar'
 
-docker exec -u root -d -e KAFKA_BOOTSTRAP_SERVERS=localhost:9092 spark-master-41 \
+docker exec -u root -d -e KAFKA_BOOTSTRAP_SERVERS=kafka:9092 spark-master-41 \
   sh -c "/opt/spark/bin/spark-submit --jars '$KJARS' \
     --conf spark.sql.shuffle.partitions=8 \
     /tmp/rtm_pipeline.py >/tmp/rtm.log 2>&1"
@@ -174,9 +176,10 @@ This stops the streaming query (by killing the spark-submit JVM inside `spark-ma
   Kafka jars (done by `./lakehouse setup` ->
   `scripts/tools/download-jars.sh`) and using `--jars` sidesteps Ivy
   entirely. The Step 3 command above uses this approach.
-- **Bootstrap is `localhost:9092`, not `kafka:9092`** - Spark and Kafka run
-  on the host network, so service-name resolution doesn't work. Both the
-  Spark job and the host-side producer read `KAFKA_BOOTSTRAP_SERVERS`.
+- **In-container bootstrap is `kafka:9092`** - on the `lakehouse-network` bridge,
+  Spark reaches Kafka by service name. From the **host**, use the external
+  listener `localhost:9092`. Both the Spark job and the producer read
+  `KAFKA_BOOTSTRAP_SERVERS`.
 - **Submit as `-u root`** - same `home=/nonexistent` reason. Without it,
   spark-submit can't write to the checkpoint dir or Ivy cache.
 - **Loud-but-ignorable warnings on submit.** `ClassNotFoundException` for

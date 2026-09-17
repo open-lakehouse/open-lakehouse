@@ -54,11 +54,12 @@ class TestU27TeardownDocsAreTruthful:
         # reset`, not raw `down -v`.
         body = STOP_MD.read_text()
         assert "./lakehouse reset" in body, "stop.md must point at ./lakehouse reset"
-        # And it must warn that down -v cannot reset host Postgres / SeaweedFS.
+        # And it must warn that — since storage is Composed (PR #13) — `down -v` now
+        # WIPES the storage volumes (the opposite of the old host-installed claim).
         low = body.lower()
         assert "down -v" in low and (
-            "host postgresql" in low or "host postgres" in low
-        ), "stop.md must explain down -v does not reset host PostgreSQL"
+            "postgres-data" in low and "seaweedfs-data" in low
+        ), "stop.md must explain down -v now wipes postgres-data + seaweedfs-data"
 
     def test_skill_rule5_and_claude_rule4_route_to_reset(self):
         assert (

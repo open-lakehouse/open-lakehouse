@@ -10,7 +10,7 @@ For AI-assistant deep reference (REST API, credential vending, multi-engine exam
 |------------|--------------|
 | Iceberg REST API | Standard endpoint any Iceberg client speaks |
 | Multi-engine reads | DuckDB, Trino, Dremio, PyIceberg without per-engine config |
-| Multi-format | Iceberg + Delta + Hudi (via UniForm) in one catalog |
+| Write format | **Delta** (UC OSS write path); Iceberg is **read-only** via the REST endpoint — no Iceberg/Hudi writes |
 | Credential vending | UC mints short-lived S3 creds; clients don't ship hardcoded keys |
 | Open governance | UC's permission model (Spark and downstream both honor it) |
 
@@ -119,7 +119,7 @@ SELECT * FROM uc.bronze.orders LIMIT 10;
 
 The same `iceberg.bronze.orders` table is visible to Spark (via the JVM client) and DuckDB (via the REST client). One catalog, two engines, no data movement.
 
-## Limitations of UC OSS 0.4.x
+## Limitations of UC OSS 0.5.0
 
 - Auth providers (OAuth, SAML) are partial. Local demos run without auth.
 - The Delta-native API surface is read-mostly. Full Delta DML still goes through Spark.

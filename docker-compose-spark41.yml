@@ -1,12 +1,34 @@
+# Spark 4.1 standalone cluster (master + worker + Connect) on the shared
+# lakehouse-network bridge (PR #13 / Phase 1, T-1.3).
+#
+# Bridge conversion, porting terraform/spark-ecs/docker/entrypoint.sh (§1.8):
+# the standalone master BINDS AND ADVERTISES its --host, so it must be this
+# container's own bridge IP, NEVER 0.0.0.0 — otherwise a worker receives 0.0.0.0
+# as the master address and RPC silently fails. The IP is resolved with
+# `hostname -i | tr ' ' '\n' | grep -vE '^127\.' | head -1` (the same
+# non-loopback filter the ECS entrypoint uses): a bare `hostname -i | cut` can
+# hand back 127.0.1.1 first, which would advertise loopback and break RPC.
+# Workers and the Connect server address the master by its DNS name
+# (spark-master-41) on the bridge; each also exports SPARK_LOCAL_IP so
+# master<->worker<->executor RPC and the Connect driver advertise reachable
+# addresses.
+#
+# Client invariant: Connect publishes 15002 so sc://localhost:15002 keeps working
+# unchanged from the host (Golden Rule #3).
+
 services:
   spark-master-41:
     image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
     container_name: spark-master-41
-    network_mode: "host"
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       - SPARK_MASTER_PORT=7078
       - SPARK_MASTER_WEBUI_PORT=8082
+    ports:
+      - "7078:7078"   # master RPC
+      - "8082:8082"   # master UI
     volumes:
       - spark-data:/opt/spark-data
       - ./config/spark:/opt/spark/conf
@@ -15,24 +37,30 @@ services:
       - ./scripts:/scripts
       - ./ivy-cache:/root/.ivy2
       - ./data:/data
-    extra_hosts:
-      - host.docker.internal:host-gateway
     post_start:
       - command: bash -c "mkdir -p /opt/spark-data/logs; chown -R 185 /opt/spark-data; chmod -R g+w /opt/spark-data; chmod g+s /opt/spark-data"
         user: root
     command: >
       bash -c "
-        /opt/spark/sbin/start-master.sh --host 0.0.0.0 --port 7078 --webui-port 8082 &&
+        export SPARK_LOCAL_IP=$$(hostname -i | tr ' ' '\n' | grep -vE '^127\.' | head -1);
+        export SPARK_PUBLIC_DNS=$$SPARK_LOCAL_IP;
+        echo \"spark-master binding/advertising $$SPARK_LOCAL_IP:7078\";
+        /opt/spark/sbin/start-master.sh --host $$SPARK_LOCAL_IP --port 7078 --webui-port 8082 &&
         tail -f /opt/spark/logs/*
         "
+    networks:
+      - lakehouse-network
 
   spark-worker-41:
     image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
     container_name: spark-worker-41
-    env_file: .env
-    network_mode: "host"
+    env_file:
+      - path: .env
+        required: false
     environment:
       - SPARK_WORKER_WEBUI_PORT=8083
+    ports:
+      - "8083:8083"   # worker UI
     volumes:
       - spark-data:/opt/spark-data
       - ./config/spark:/opt/spark/conf
@@ -40,28 +68,39 @@ services:
       - ./jars:/opt/spark/jars-extra
       - ./scripts:/scripts
       - ./data:/data
-    extra_hosts:
-      - host.docker.internal:host-gateway
+    depends_on:
+      - spark-master-41
     post_start:
       - command: bash -c "mkdir -p /opt/spark-data/logs; chown -R 185 /opt/spark-data; chmod -R g+w /opt/spark-data; chmod g+s /opt/spark-data"
         user: root
     command: >
       bash -c "
+        export SPARK_LOCAL_IP=$$(hostname -i | tr ' ' '\n' | grep -vE '^127\.' | head -1);
+        export SPARK_PUBLIC_DNS=$$SPARK_LOCAL_IP;
         sleep 5 &&
-        /opt/spark/sbin/start-worker.sh spark://host.docker.internal:7078 --webui-port 8083 &&
+        /opt/spark/sbin/start-worker.sh spark://spark-master-41:7078 --webui-port 8083 &&
         tail -f /opt/spark/logs/*
         "
+    networks:
+      - lakehouse-network
 
-  # Spark Connect server — Connect-first architecture.
-  # Required for SDP (pyspark.pipelines uses Connect internally) and the default
-  # transport for client demos. Exposes gRPC on port 15002.
+  # Spark Connect server — Connect-first architecture. Required for SDP and the
+  # default client transport. gRPC on 15002 (published, so sc://localhost:15002
+  # works from the host). As the Spark driver it must advertise SPARK_LOCAL_IP so
+  # executors on the worker can reach it.
+  # No --packages: spark-connect_2.13 is already bundled in /opt/spark/jars of
+  # this image, so we skip the ivy/Maven resolve at cold start (offline-friendly;
+  # Phase 6 air-gapped goal).
   spark-connect-41:
     image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
     container_name: spark-connect-41
-    env_file: .env
-    network_mode: "host"
+    env_file:
+      - path: .env
+        required: false
     environment:
       - SPARK_NO_DAEMONIZE=1
+    ports:
+      - "15002:15002"   # Spark Connect gRPC
     volumes:
       - spark-data:/opt/spark-data
       - ./config/spark:/opt/spark/conf
@@ -69,23 +108,28 @@ services:
       - ./scripts:/scripts
       - ./data:/data
       - ./ivy-cache:/root/.ivy2
-    extra_hosts:
-      - host.docker.internal:host-gateway
     depends_on:
       - spark-master-41
       - spark-worker-41
     command: >
       bash -c "
+        export SPARK_LOCAL_IP=$$(hostname -i | tr ' ' '\n' | grep -vE '^127\.' | head -1);
+        export SPARK_PUBLIC_DNS=$$SPARK_LOCAL_IP;
         sleep 10 &&
         /opt/spark/sbin/start-connect-server.sh
-        --master spark://host.docker.internal:7078
+        --master spark://spark-master-41:7078
         --conf spark.connect.grpc.binding.port=15002
         --conf spark.connect.grpc.binding.host=0.0.0.0
-        --packages org.apache.spark:spark-connect_2.13:4.1.0
         "
+    networks:
+      - lakehouse-network
 
 volumes:
   spark-data:
     driver: local
   spark-logs:
     driver: local
+
+networks:
+  lakehouse-network:
+    driver: bridge

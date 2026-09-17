@@ -1,7 +1,7 @@
 -- Gold: revenue and order metrics per brand. Pure SQL aggregation over silver.
 CREATE MATERIALIZED VIEW gold_brand_summary
 USING delta
-TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported')
+TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported', 'delta.checkpoint.writeStatsAsJson' = 'true', 'delta.checkpoint.writeStatsAsStruct' = 'true')
 AS
 SELECT
   brand_name,

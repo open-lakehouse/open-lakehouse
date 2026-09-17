@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Download required JARs for open-lakehouse (Spark 4.1, Iceberg 1.10, Delta 4.0)
+# Download required JARs for open-lakehouse (Spark 4.1, Iceberg 1.10, Delta 4.3)
 # Supports --verify-only flag for CI validation
 
 set -e  # Exit on error
@@ -13,6 +13,11 @@ JARS_DIR="$(cd "${JARS_DIR}" && pwd)"
 VERIFY_ONLY=false
 MAX_RETRIES=3
 RETRY_DELAY=5
+
+# Maven repository base. Defaults to public Maven Central so vanilla runs work
+# unchanged; override for an internal mirror without editing this file:
+#   MAVEN_BASE_URL=<mirror>/maven2 ./scripts/tools/download-jars.sh
+MAVEN_BASE_URL="${MAVEN_BASE_URL:-https://repo1.maven.org/maven2}"
 
 # Colors
 RED='\033[0;31m'
@@ -30,29 +35,37 @@ done
 # JAR definitions (simpler format for compatibility)
 # Format: "filename|url|min_size_bytes"
 JAR_LIST=(
-    "iceberg-spark-runtime-4.0_2.13-1.10.0.jar|https://repo1.maven.org/maven2/org/apache/iceberg/iceberg-spark-runtime-4.0_2.13/1.10.0/iceberg-spark-runtime-4.0_2.13-1.10.0.jar|40000000"
-    "hadoop-aws-3.4.1.jar|https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar|800000"
-    "aws-java-sdk-bundle-1.12.780.jar|https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.780/aws-java-sdk-bundle-1.12.780.jar|350000000"
-    "bundle-2.24.6.jar|https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.24.6/bundle-2.24.6.jar|400000000"
-    "postgresql-42.7.4.jar|https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar|1000000"
-    # Delta 4.2.0 — required for Spark 4.1 ABI compatibility (4.0.x breaks with
-    # NoSuchMethodError on org.apache.spark.internal.LogKey).
-    "delta-spark_2.13-4.2.0.jar|https://repo1.maven.org/maven2/io/delta/delta-spark_2.13/4.2.0/delta-spark_2.13-4.2.0.jar|8000000"
-    "delta-storage-4.2.0.jar|https://repo1.maven.org/maven2/io/delta/delta-storage/4.2.0/delta-storage-4.2.0.jar|70000"
-    # Unity Catalog OSS Spark connector — lets Spark write Delta tables that
-    # register in UC (catalog `unity`). client jar is its runtime dep.
-    "unitycatalog-spark_2.13-0.3.0.jar|https://repo1.maven.org/maven2/io/unitycatalog/unitycatalog-spark_2.13/0.3.0/unitycatalog-spark_2.13-0.3.0.jar|20000"
-    "unitycatalog-client-0.3.0.jar|https://repo1.maven.org/maven2/io/unitycatalog/unitycatalog-client/0.3.0/unitycatalog-client-0.3.0.jar|250000"
+    "iceberg-spark-runtime-4.0_2.13-1.10.0.jar|${MAVEN_BASE_URL}/org/apache/iceberg/iceberg-spark-runtime-4.0_2.13/1.10.0/iceberg-spark-runtime-4.0_2.13-1.10.0.jar|40000000"
+    "hadoop-aws-3.4.1.jar|${MAVEN_BASE_URL}/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar|800000"
+    "aws-java-sdk-bundle-1.12.780.jar|${MAVEN_BASE_URL}/com/amazonaws/aws-java-sdk-bundle/1.12.780/aws-java-sdk-bundle-1.12.780.jar|350000000"
+    "bundle-2.24.6.jar|${MAVEN_BASE_URL}/software/amazon/awssdk/bundle/2.24.6/bundle-2.24.6.jar|400000000"
+    "postgresql-42.7.4.jar|${MAVEN_BASE_URL}/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar|1000000"
+    # Delta 4.3.1 — ABI-verified on Spark 4.1/Java21 (I-02) and required for
+    # catalog-managed Delta via the UC 0.5.x connector family below. NOTE:
+    # 4.3.0 NPEs through the UC Spark connector (AbstractDeltaCatalogClient reads a
+    # null catalog-options map); 4.3.1 fixes it. 4.0.x breaks with NoSuchMethodError
+    # on org.apache.spark.internal.LogKey — do not downgrade.
+    "delta-spark_2.13-4.3.1.jar|${MAVEN_BASE_URL}/io/delta/delta-spark_2.13/4.3.1/delta-spark_2.13-4.3.1.jar|8000000"
+    "delta-storage-4.3.1.jar|${MAVEN_BASE_URL}/io/delta/delta-storage/4.3.1/delta-storage-4.3.1.jar|70000"
+    # Unity Catalog OSS Spark connector family (0.5.x). The connector lets Spark
+    # write Delta tables that register in UC (catalogs `unity` / `managed_demo`);
+    # the client jar is its runtime dep, and the hadoop jar provides the
+    # credential-vending Hadoop configs (UCCredentialHadoopConfs). connector tops
+    # out at 0.4.1 (no 0.5.x published) but pairs with the 0.5.1 client + hadoop —
+    # this exact set is what makes catalog-managed Delta work (PR #13 / I-45).
+    "unitycatalog-spark_2.13-0.4.1.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-spark_2.13/0.4.1/unitycatalog-spark_2.13-0.4.1.jar|20000"
+    "unitycatalog-client-0.5.1.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-client/0.5.1/unitycatalog-client-0.5.1.jar|400000"
+    "unitycatalog-hadoop-0.5.1.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-hadoop/0.5.1/unitycatalog-hadoop-0.5.1.jar|40000"
     # Spark SQL Kafka connector — needed by any Structured Streaming job that
     # reads/writes Kafka (the realtime-mode demo, any streaming SDP source).
     # `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0`
     # is the textbook path but fails on the stock apache/spark:4.1.0 image —
     # Ivy can't write to user.home=/nonexistent. Pre-downloading here lets
     # spark-submit use --jars instead.
-    "spark-sql-kafka-0-10_2.13-4.1.0.jar|https://repo1.maven.org/maven2/org/apache/spark/spark-sql-kafka-0-10_2.13/4.1.0/spark-sql-kafka-0-10_2.13-4.1.0.jar|400000"
-    "spark-token-provider-kafka-0-10_2.13-4.1.0.jar|https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.13/4.1.0/spark-token-provider-kafka-0-10_2.13-4.1.0.jar|50000"
-    "kafka-clients-3.9.0.jar|https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.9.0/kafka-clients-3.9.0.jar|8000000"
-    "commons-pool2-2.12.0.jar|https://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.12.0/commons-pool2-2.12.0.jar|100000"
+    "spark-sql-kafka-0-10_2.13-4.1.0.jar|${MAVEN_BASE_URL}/org/apache/spark/spark-sql-kafka-0-10_2.13/4.1.0/spark-sql-kafka-0-10_2.13-4.1.0.jar|400000"
+    "spark-token-provider-kafka-0-10_2.13-4.1.0.jar|${MAVEN_BASE_URL}/org/apache/spark/spark-token-provider-kafka-0-10_2.13/4.1.0/spark-token-provider-kafka-0-10_2.13-4.1.0.jar|50000"
+    "kafka-clients-3.9.0.jar|${MAVEN_BASE_URL}/org/apache/kafka/kafka-clients/3.9.0/kafka-clients-3.9.0.jar|8000000"
+    "commons-pool2-2.12.0.jar|${MAVEN_BASE_URL}/org/apache/commons/commons-pool2/2.12.0/commons-pool2-2.12.0.jar|100000"
 )
 
 # Get file size (cross-platform)
@@ -161,7 +174,7 @@ for jar_entry in "${JAR_LIST[@]}"; do
     fi
 
     # Download
-    echo -e "   Downloading from Maven Central..."
+    echo -e "   Downloading..."
     if download_with_retry "$url" "$jar_name"; then
         if verify_size "$jar_name" "$min_size"; then
             echo -e "   ${GREEN}✓${NC} Download complete"

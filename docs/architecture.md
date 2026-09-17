@@ -73,22 +73,29 @@ UC OSS persists its catalog metadata in a PostgreSQL database (`unitycatalog` sc
 
 - **Multi-engine reads.** DuckDB, Trino, etc. speak Iceberg REST natively. JDBC catalog binds you to clients that know SparkCatalog.
 - **Credential vending.** UC can mint short-lived S3 credentials per request; clients don't ship hardcoded keys.
-- **Format flexibility.** UC OSS 0.4.x handles Iceberg, Delta, and Hudi (the latter via UniForm projection).
+- **Engine neutrality (reads).** UC OSS exposes an Iceberg REST endpoint, so
+  DuckDB, Trino, PyIceberg, etc. can read UC-registered tables without Spark.
+  Note the write side is **Delta-only**: UC OSS (0.4.x and 0.5.0 alike) rejects
+  `data_source_format=ICEBERG` and its Iceberg REST adapter is read-only, so
+  Delta is the write format on this stack and Iceberg is a cross-engine *read*
+  surface. Hudi is not supported. (UniForm — Delta writing Iceberg-readable
+  metadata — is an untested avenue, not a shipped capability here.)
 
 ## Open table formats
 
 | Format | When to use | Where it lives |
 |--------|-------------|----------------|
-| **Iceberg 1.10** | Default. Most demos. UC OSS surfaces it natively. | Catalog: `iceberg.<schema>.<table>` |
-| **Delta 4.0** | Demos that explicitly show Delta features, or hand-off to Databricks. | Catalog: `spark_catalog.<schema>.<table>` |
+| **Delta 4.3.1** | **The write path.** All demos write Delta into Unity Catalog. | Catalog: `unity.<schema>.<table>` (also `spark_catalog.*` for path-based Delta) |
+| **Iceberg 1.10** | **Read-only** cross-engine surface via UC's Iceberg REST endpoint (DuckDB/Trino/PyIceberg read tables registered elsewhere). UC OSS exposes no Iceberg write. | Catalog: `iceberg.<schema>.<table>` (read) |
 
-Both run in the same Spark session. To enable Delta alongside Iceberg, extend `spark.sql.extensions`:
+Both extensions load in the same Spark session (Iceberg for reads, Delta for
+writes). `spark.sql.extensions` carries both:
 
 ```
 spark.sql.extensions  org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,io.delta.sql.DeltaSparkSessionExtension
 ```
 
-## Streaming: Kafka → Spark → Iceberg
+## Streaming: Kafka → Spark → Delta
 
 Kafka is **not** registered in the catalog. It's an event bus that Spark Structured Streaming reads from directly. Bronze tables land the events; silver and gold derive from bronze with declarative pipelines (see [`.claude/skills/sdp/`](../.claude/skills/sdp/)).
 
@@ -167,11 +174,11 @@ A `--spark-local` flag exists on the CLI as a forward-compat stub for an eventua
 |-----------|---------|------------|
 | Spark | 4.1.0 | Scala 2.13, Java 21 |
 | Iceberg | 1.10.0 | `iceberg-spark-runtime-4.0_2.13-1.10.0.jar` covers Spark 4.0+ |
-| Delta | 4.2.0 | Compatible with Spark 4.1 |
+| Delta | 4.3.1 | Compatible with Spark 4.1 |
 | Hadoop | 3.4.1 | Bundled in Spark image |
 | AWS SDK v2 | 2.24.6 | Exact match for Hadoop 3.4.1 |
 | Airflow | 3.1.6 | Breaking changes from 2.x — see airflow-3 skill |
-| Unity Catalog OSS | 0.4.0 | Catalog-managed commits, Iceberg REST |
+| Unity Catalog OSS | 0.5.0 | Catalog-managed Delta, Iceberg REST (read-only) |
 | MLflow | 3.1 | AI Gateway needs ≥ 3.0 |
 
 Don't change these without testing both the connectivity suite and at least one streaming demo end-to-end.

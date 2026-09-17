@@ -42,6 +42,8 @@ services:
       - ICEBERG_CATALOG_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/ol_test_${LAKEHOUSE_RESOURCE_SUFFIX}_iceberg_catalog
     command: >
       bash -c "
+        export SPARK_LOCAL_IP=$$(hostname -i | tr ' ' '\n' | grep -vE '^127\.' | head -1);
+        export SPARK_PUBLIC_DNS=$$SPARK_LOCAL_IP;
         sleep 5 &&
         /opt/spark/sbin/start-worker.sh spark://spark-master-41-${LAKEHOUSE_RESOURCE_SUFFIX}:7078 --webui-port 8083 &&
         tail -f /opt/spark/logs/*
@@ -67,6 +69,8 @@ services:
       - ICEBERG_CATALOG_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/ol_test_${LAKEHOUSE_RESOURCE_SUFFIX}_iceberg_catalog
     command: >
       bash -c "
+        export SPARK_LOCAL_IP=$$(hostname -i | tr ' ' '\n' | grep -vE '^127\.' | head -1);
+        export SPARK_PUBLIC_DNS=$$SPARK_LOCAL_IP;
         sleep 10 &&
         /opt/spark/sbin/start-connect-server.sh
         --master spark://spark-master-41-${LAKEHOUSE_RESOURCE_SUFFIX}:7078

@@ -1,0 +1,45 @@
+{
+  "purpose": "Golden pre-PR-#13 baseline captured at Checkpoint 0 (absorbed Phase 0, T-0.1/T-0.2).",
+  "captured_at": "2026-08-19",
+  "captured_on_branch": "feat/net-bridge-conversion",
+  "base_shas": {
+    "main": "4090bc3e10e8361352a33c0c0cd58f78b60e6e22",
+    "pr_11_uv_lock_hygiene": "b85056277e84dd72a2941aeb6e17d276fcb97e71",
+    "pr_12_lifecycle_reset_safety": "00d70c62e8258402f2c0fea88921beef2c527cb1",
+    "integration_branch_tip": "1105717cf3260651c23751f49468232410764c4a"
+  },
+  "status_json": {
+    "note": "Stack intentionally NOT running at Checkpoint 0; this is the down-state snapshot and the schema of record before PR #13 adds `storage`.",
+    "mode": "connect",
+    "services": {
+      "postgresql": false,
+      "seaweedfs": false,
+      "unity_catalog": false,
+      "mlflow": false
+    },
+    "spark": {
+      "version": "4.1",
+      "master": false,
+      "worker": false,
+      "connect_container": false,
+      "connect_grpc_listening": false,
+      "remote": "sc://localhost:15002"
+    },
+    "kafka": { "broker": false, "zookeeper": false },
+    "airflow": { "webserver": false, "scheduler": false },
+    "all_healthy": false
+  },
+  "unit_baseline": {
+    "command": "poetry run pytest tests/ --ignore=tests/integration -q",
+    "collected": 151,
+    "passed": 151,
+    "failed": 0,
+    "duration_seconds": 29,
+    "docker_required": false
+  },
+  "cp_baseline": {
+    "task": "T-0.3",
+    "status": "skipped (best-effort per addendum §6)",
+    "reason": "CP (containerized lakehouse platform) tree not stood up in this session; not a PR #13 blocker."
+  }
+}

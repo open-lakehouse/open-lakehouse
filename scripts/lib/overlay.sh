@@ -128,6 +128,18 @@ overlay_set_compose_args() {
     local base="docker-compose-${svc}.yml"
     OVERLAY_COMPOSE_ARGS=()
 
+    # Storage (PostgreSQL + SeaweedFS) is deliberately UNSCOPED: one shared
+    # instance on the fixed host ports 5432/8333 that every run reaches, isolating
+    # instead by run-scoped DATABASE/bucket names inside it. It therefore ships no
+    # `docker-compose-storage.test.yml`, and OVERLAY_BASE_SERVICES omits it. Always
+    # resolve it to the base file only — even under an active overlay — so
+    # `start storage` / `stop storage` (and the `start all` storage arm) never fail
+    # with "required overlay file missing".
+    if [[ "${svc}" == "storage" ]]; then
+        OVERLAY_COMPOSE_ARGS=(-f "${base}")
+        return 0
+    fi
+
     if [[ "${OVERLAY_ACTIVE:-false}" != "true" ]]; then
         OVERLAY_COMPOSE_ARGS=(-f "${base}")
         return 0

@@ -20,7 +20,16 @@ ORDERS_PATH = os.environ.get("ORDERS_PATH", "/data/events/orders_7d.parquet")
 DIMS_PATH = os.environ.get("DIMS_PATH", "/data/dimensions")
 MAX_ROWS = int(os.environ.get("MEDALLION_MAX_ROWS", "200000"))
 
-_PROPS = {"provider": "delta", "delta.feature.catalogManaged": "supported"}
+# Catalog-managed Delta: the feature flag makes UC assign the location under the
+# catalog's storage_root (no explicit `location`); UC's managed-table API also
+# REQUIRES both delta.checkpoint.writeStats* properties (createTable 400s without
+# them). Verified on Delta 4.3.1 + the UC 0.5.x connector family (PR #13 / I-45).
+_PROPS = {
+    "provider": "delta",
+    "delta.feature.catalogManaged": "supported",
+    "delta.checkpoint.writeStatsAsJson": "true",
+    "delta.checkpoint.writeStatsAsStruct": "true",
+}
 
 
 @dp.materialized_view(

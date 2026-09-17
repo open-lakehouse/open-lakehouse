@@ -1,9 +1,15 @@
 # SDP against Unity Catalog OSS
 
 Running Spark Declarative Pipelines so the materialized tables land in **Unity
-Catalog OSS** as Delta tables. This was verified end-to-end on 2026-05-19
-against `newfrontdocker/unitycatalog:v0.4.1` + Spark 4.1 + Delta 4.2.0. The path
-has sharp edges — this file is the map through them.
+Catalog OSS** as Delta tables. First verified end-to-end on 2026-05-19 against
+the earlier v0.4.1 staging image; the stack now runs the official
+`unitycatalog/unitycatalog:v0.5.0` image (PR #13 / T-1.17) + Spark 4.1 + Delta
+4.3.1 + the UC 0.5.x Spark connector family (connector 0.4.1 + client 0.5.1 +
+hadoop 0.5.1). The Iceberg write-side is unchanged (both images reject `ICEBERG`,
+both accept `DELTA` — §1.12). Two Delta write paths work: the classic explicit
+`location` + `provider` pattern, **and** — new on this stack — **catalog-managed
+Delta** against a `storage_root` catalog (see the catalog-managed section below).
+The path has sharp edges — this file is the map through them.
 
 ## TL;DR — the pattern that works
 
@@ -142,28 +148,55 @@ Without them you get `ModuleNotFoundError` from `pyspark/pipelines/cli.py`.
   read-only (no `POST` endpoints) and its native API rejects `ICEBERG` as a
   `data_source_format`. SDP-on-UC works for **Delta only**. See
   [[unity-catalog-oss]] for the full UC write-side limitations.
-## Catalog-managed tables — SQL transformations DO work (verified 2026-06-08)
+## Catalog-managed tables — SQL transformations work (verified PR #13 / I-45)
+
+> **The exact jar set matters** (measured, PR #13 / I-45). Catalog-managed Delta
+> works only on **Delta 4.3.1 + the UC 0.5.x connector family** — connector
+> `unitycatalog-spark_2.13:0.4.1` + client `unitycatalog-client:0.5.1` + hadoop
+> `unitycatalog-hadoop:0.5.1`. Why the earlier combinations failed:
+> - **Delta 4.2.0**: a location-less `CREATE … USING delta` is *not delegated*
+>   to the UC V2 catalog — Spark routes it to the session `spark_catalog` and
+>   fails `SCHEMA_NOT_FOUND`. (Explicit `LOCATION` still works on 4.2.0.)
+> - **Delta 4.3.0**: delegates, then NPEs in
+>   `AbstractDeltaCatalogClient.fromCatalogOptionsIfEnabled` (null catalog
+>   options). **Delta 4.3.1 fixes this.**
+> - **Mismatched connector jars**: connector 0.4.1 needs client **0.5.1**
+>   (`io.unitycatalog.client.delta.model.*`) and hadoop **0.5.1**
+>   (`UCCredentialHadoopConfs`). With client/hadoop 0.4.x you get
+>   `ClassNotFoundException`.
 
 The "location via `table_properties`, Python-only" rules above apply to UC
 deployments where you supply an explicit storage location. A UC catalog with a
 **`storage_root`** configured (e.g. a `managed_demo`-style catalog) instead
 expects **catalog-managed Delta tables**: the catalog assigns the location under
-its storage root, so you pass **no `location` at all** — just the
-`delta.feature.catalogManaged` feature flag. That removes the only reason SQL
-couldn't target UC, so **SQL `.sql` transformations now work**:
+its storage root (`…/__unitystorage/catalogs/<id>/tables/<id>`), so you pass
+**no `location` at all** — just the feature flag plus the two checkpoint
+properties UC's managed-table API requires. That removes the only reason SQL
+couldn't target UC, so **SQL `.sql` transformations work**:
 
 ```sql
 CREATE MATERIALIZED VIEW orders_enriched
 USING delta
-TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported')
+TBLPROPERTIES (
+  'delta.feature.catalogManaged'        = 'supported',
+  'delta.checkpoint.writeStatsAsJson'   = 'true',
+  'delta.checkpoint.writeStatsAsStruct' = 'true'
+)
 AS SELECT ... FROM orders_bronze;
 ```
 
 Notes:
+- **The two `delta.checkpoint.writeStats*` properties are REQUIRED.** UC's
+  managed-table `createTable` rejects the table otherwise with
+  `400 … MANAGED table required property 'delta.checkpoint.writeStatsAs{Json,Struct}' must be 'true'`.
+- The target catalog must be a UC catalog with a **`storage_root`**, and Spark
+  must have `spark.sql.catalog.<name>` registered as `UCSingleCatalog` (this
+  stack registers both `unity` and `managed_demo`).
 - Set the provider via the **`USING delta`** clause, NOT `TBLPROPERTIES('provider'=...)`
   — `provider` is reserved (`UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY`).
 - Python `@dp.materialized_view` for catalog-managed tables: pass
-  `table_properties={"provider": "delta", "delta.feature.catalogManaged": "supported"}`
+  `table_properties={"provider": "delta", "delta.feature.catalogManaged": "supported",
+  "delta.checkpoint.writeStatsAsJson": "true", "delta.checkpoint.writeStatsAsStruct": "true"}`
   with no `location`.
 - Reading external files (parquet) still can't be a SQL `FROM` — SDP qualifies
   `parquet.\`path\`` as a catalog table and fails. Keep file ingestion in a

@@ -103,6 +103,23 @@ curl http://localhost:8333
 
 ## Docker Issues
 
+### Colima (macOS): bind-mounting `/tmp` silently fails
+
+**Symptom**: A container that reads a config file bind-mounted from a host `/tmp`
+path fails as if the file were empty or missing — e.g. SeaweedFS logs
+`fail to read /conf/s3conf.json` even though the file exists on the host.
+
+**Cause**: Colima only shares specific host paths into the VM (typically your
+home directory); `/tmp` (really `/private/tmp` on macOS) is **not** shared, so
+the bind mount resolves to an empty path inside the VM. This is silent — Docker
+reports no error.
+
+**Solution**: Don't bind-mount from `/tmp`. Use a **named volume**, or write the
+file **inside the container** at startup. The stack does the latter — the
+SeaweedFS service generates `s3conf.json` in-container from `S3_ACCESS_KEY` /
+`S3_SECRET_KEY` (see `docker-compose-storage.yml`). Keep repo-relative bind
+mounts (e.g. `./config/...`) under the shared home directory.
+
 ### Permission Denied
 
 **Symptom**: `permission denied while trying to connect to the Docker daemon`
@@ -245,7 +262,6 @@ trip every first-time `spark-submit` on this stack:
 |---------|-------|-----|
 | `java.io.FileNotFoundException: /nonexistent/.ivy2.5.2/cache/resolved-…-1.0.xml` after `--packages …` | The `spark` user has `home=/nonexistent` and Ivy can't write there. `spark.jars.ivy` and `-Duser.home=/root` are ignored. | Pre-download the package's jars (see `scripts/tools/download-jars.sh` — the Kafka SQL connector + deps are pinned there) and use `--jars /opt/spark/jars-extra/…` instead of `--packages`. |
 | Checkpoint dir / Ivy cache / `pylibs` write fails with `Permission denied` | Same `home=/nonexistent`. | Run with `docker exec -u root spark-master-41 …`. |
-| Stream job dies with `No resolvable bootstrap urls given in bootstrap.servers` | The job uses `kafka:9092` but Spark and Kafka are on the host network, not a Compose network. | Pass `-e KAFKA_BOOTSTRAP_SERVERS=localhost:9092` on the `docker exec` (Postgres / UC / SeaweedFS are likewise `localhost:5432 / 8081 / 8333`). |
 
 Loud-but-ignorable on submit: `ClassNotFoundException` for
 `IcebergSparkSessionExtensions`, `DeltaSparkSessionExtension`, and

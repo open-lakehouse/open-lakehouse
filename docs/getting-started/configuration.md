@@ -18,32 +18,47 @@ cp .env.example .env
 
 ### Required Variables
 
+These values are consumed two ways: Docker Compose interpolates them into the
+service definitions, and host-side tooling (`init-storage.sh`, `migrate`, the
+`test` checks) reads them directly. The **hosts here are the published ports on
+`localhost`** — that is the host-side view. In-container config never uses these
+hosts; containers reach each other by service name (`postgres`, `seaweedfs`,
+`unity-catalog`), which is already baked into the bind-mounted
+`spark-defaults.conf` and the compose files.
+
 ```bash
-# PostgreSQL (Iceberg catalog)
+# PostgreSQL (metastore for UC / MLflow / Airflow / iceberg_catalog)
 POSTGRES_USER=lakehouse
 POSTGRES_PASSWORD=your_secure_password
-POSTGRES_HOST=host.docker.internal  # or localhost
+POSTGRES_HOST=localhost   # host-side view; containers use the `postgres` service name
 POSTGRES_PORT=5432
 
 # SeaweedFS (S3-compatible storage)
-S3_ENDPOINT=http://host.docker.internal:8333
-S3_ACCESS_KEY=any_string_here
-S3_SECRET_KEY=any_string_here
+S3_ENDPOINT=http://localhost:8333   # host-side view; containers use http://seaweedfs:8333
+S3_ACCESS_KEY=lakehouse_s3
+S3_SECRET_KEY=lakehouse_s3_secret
 S3_BUCKET=lakehouse
 S3_WAREHOUSE=s3a://lakehouse/warehouse
 
-# Iceberg (derived from above)
-ICEBERG_CATALOG_URI=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/iceberg_catalog
+# Iceberg warehouse (derived from above)
 ICEBERG_WAREHOUSE=${S3_WAREHOUSE}
 ```
 
-### Host Configuration
+> **No JDBC catalog.** The Iceberg catalog is Unity Catalog OSS reached over REST
+> (golden rule 1) — there is **no** `ICEBERG_CATALOG_URI` / `spark.sql.catalog.iceberg.type=jdbc`
+> path. `iceberg_catalog` is just a PostgreSQL database name the init step creates;
+> it is not a Spark catalog backend.
 
-| Environment | POSTGRES_HOST | S3_ENDPOINT |
-|-------------|---------------|-------------|
-| macOS/Windows Docker | `host.docker.internal` | `http://host.docker.internal:8333` |
-| Linux Docker | `172.17.0.1` or `localhost` | `http://172.17.0.1:8333` |
-| Native (no Docker) | `localhost` | `http://localhost:8333` |
+### Host vs. in-network addressing
+
+Since PR #13, PostgreSQL and SeaweedFS are Compose services (see
+`docker-compose-storage.yml`) on the shared `lakehouse-network` bridge, publishing
+their ports to the host:
+
+| Caller | PostgreSQL | S3 endpoint |
+|--------|-----------|-------------|
+| From another container (in-network) | `postgres:5432` | `http://seaweedfs:8333` |
+| From your host (published ports) | `localhost:5432` | `http://localhost:8333` |
 
 ## Spark Configuration
 
@@ -54,19 +69,30 @@ cp config/spark/spark-defaults.conf.example config/spark/spark-defaults.conf
 
 ### Key Settings
 
+This config runs **inside** the Spark containers on the bridge network, so every
+endpoint is an **in-network service name**, not `localhost`. (From your host you
+would use `localhost:8081` / `localhost:8333`, but Spark reads this file from
+inside a container.)
+
 ```properties
-# Iceberg via Unity Catalog REST (the only catalog mode in this repo)
-spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions
+# unity — Unity Catalog OSS, Delta tables (PRIMARY write path)
+spark.sql.catalog.unity=io.unitycatalog.spark.UCSingleCatalog
+spark.sql.catalog.unity.uri=http://unity-catalog:8080
+spark.sql.catalog.unity.token=not_used
+
+# iceberg — UC OSS Iceberg REST endpoint, READ-ONLY (the only catalog mode here;
+# there is no JDBC catalog — golden rule 1)
+spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,io.delta.sql.DeltaSparkSessionExtension
 spark.sql.catalog.iceberg=org.apache.iceberg.spark.SparkCatalog
 spark.sql.catalog.iceberg.catalog-impl=org.apache.iceberg.rest.RESTCatalog
-spark.sql.catalog.iceberg.uri=http://localhost:8081/api/2.1/unity-catalog/iceberg
+spark.sql.catalog.iceberg.uri=http://unity-catalog:8080/api/2.1/unity-catalog/iceberg
 spark.sql.catalog.iceberg.warehouse=unity
 spark.sql.catalog.iceberg.token=not_used
 
-# S3/SeaweedFS
-spark.hadoop.fs.s3a.endpoint=http://localhost:8333
-spark.hadoop.fs.s3a.access.key=your_access_key
-spark.hadoop.fs.s3a.secret.key=your_secret_key
+# S3/SeaweedFS (in-network service name)
+spark.hadoop.fs.s3a.endpoint=http://seaweedfs:8333
+spark.hadoop.fs.s3a.access.key=lakehouse_s3
+spark.hadoop.fs.s3a.secret.key=lakehouse_s3_secret
 spark.hadoop.fs.s3a.path.style.access=true
 spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
 
@@ -74,6 +100,9 @@ spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
 spark.driver.memory=4g
 spark.executor.memory=8g
 ```
+
+See `config/spark/spark-defaults.conf.example` for the complete, authoritative set
+(including the catalog-managed Delta catalog and the required JARs).
 
 ### Spark version
 
@@ -117,16 +146,21 @@ For local development, recommended minimums:
 Adjust Docker Desktop resources if needed:
 - Docker Desktop → Settings → Resources
 
-## Network Modes
+## Networking
 
-The stack uses `network_mode: host` for Docker containers, meaning:
-- Containers share the host's network namespace
-- No port mapping needed (containers bind directly)
-- Services communicate via `localhost`
+The stack runs on a shared Docker **bridge network** (`lakehouse-network`):
+- Containers reach each other by **service name** — e.g. Spark talks to
+  `unity-catalog:8080`, `seaweedfs:8333`, `kafka:9092`, `postgres:5432`.
+- Host-facing services **publish ports**, so from your machine you use
+  `localhost:<published-port>` (e.g. `sc://localhost:15002`, `localhost:8081`
+  for Unity Catalog, `localhost:8333` for S3).
+- PostgreSQL and SeaweedFS are **Compose services** (see
+  `docker-compose-storage.yml`), not host-installed — their data lives in named
+  volumes.
 
-This simplifies configuration but requires:
-- No conflicting services on the same ports
-- PostgreSQL and SeaweedFS running on the host
+Because the network is project-scoped, you can run isolated stacks side by side
+by setting `COMPOSE_PROJECT_NAME` (the test harness does this). See the port
+table in the top-level `CLAUDE.md` for the full published-port map.
 
 ## Validation
 

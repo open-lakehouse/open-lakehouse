@@ -277,3 +277,125 @@ class TestDeltaFormat:
 
         history = spark_with_delta.sql(f"DESCRIBE HISTORY delta.`{path}`")
         assert history.count() >= 2
+
+
+# =================================================================================
+# I-45 — Catalog-managed Delta (PR #13 / T-1.19, the concrete UC 0.5.0 win)
+# =================================================================================
+# A `USING delta` create with delta.feature.catalogManaged + the required
+# writeStats* properties and NO explicit location materializes under the catalog's
+# storage_root (…/__unitystorage/…). Requires Delta 4.3.1 + the UC 0.5.x connector
+# family. Runs inside spark-master-41 (real jars + spark-defaults). The full
+# sdp-medallion SQL pipeline exercises the same path via `spark-pipelines`
+# (demos/sdp-medallion/run.sh); this is the minimal, deterministic gate.
+
+import json as _json  # noqa: E402
+import subprocess as _sp  # noqa: E402
+import textwrap as _tw  # noqa: E402
+import urllib.request as _url  # noqa: E402
+import uuid as _uuid  # noqa: E402
+
+_UC = "http://localhost:8081/api/2.1/unity-catalog"
+_MASTER = "spark-master-41"
+
+
+def _uc_reachable() -> bool:
+    try:
+        with _url.urlopen(f"{_UC}/catalogs", timeout=3) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def _master_up() -> bool:
+    try:
+        names = _sp.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout.split()
+        return _MASTER in names
+    except Exception:
+        return False
+
+
+def _post(path, body):
+    req = _url.Request(
+        f"{_UC}/{path}",
+        data=_json.dumps(body).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        _url.urlopen(req, timeout=8)
+    except Exception:
+        pass
+
+
+@pytest.mark.integration
+class TestI45CatalogManagedDelta:
+    @pytest.fixture(autouse=True)
+    def _require(self):
+        if not _uc_reachable():
+            pytest.skip("Unity Catalog not reachable on localhost:8081")
+        if not _master_up():
+            pytest.skip(f"{_MASTER} not running")
+
+    def test_i45_catalog_managed_delta_no_location(self, tmp_path):
+        sfx = _uuid.uuid4().hex[:8]
+        cat, sch, tbl = "managed_demo", f"i45_{sfx}", "cm"
+        # A storage_root catalog is the prerequisite for catalog-managed tables.
+        _post(
+            "catalogs",
+            {"name": cat, "storage_root": "s3://lakehouse/warehouse/managed"},
+        )
+        _post("schemas", {"name": sch, "catalog_name": cat})
+        script = f"""
+        from pyspark.sql import SparkSession
+        s = (SparkSession.builder.appName("i45").master("local[2]")
+             .config("spark.ui.enabled","false")
+             .config("spark.sql.catalog.{cat}","io.unitycatalog.spark.UCSingleCatalog")
+             .config("spark.sql.catalog.{cat}.uri","http://unity-catalog:8080")
+             .config("spark.sql.catalog.{cat}.token","not_used").getOrCreate())
+        s.sparkContext.setLogLevel("ERROR")
+        t = "{cat}.{sch}.{tbl}"
+        # No LOCATION — the catalog assigns it. Both writeStats* props are required.
+        s.sql(f"CREATE TABLE IF NOT EXISTS {{t}} (id BIGINT) USING delta "
+              "TBLPROPERTIES ('delta.feature.catalogManaged'='supported',"
+              "'delta.checkpoint.writeStatsAsJson'='true',"
+              "'delta.checkpoint.writeStatsAsStruct'='true')")
+        s.sql(f"INSERT INTO {{t}} VALUES (1),(2),(3),(4)")
+        n = s.sql(f"SELECT count(*) FROM {{t}}").collect()[0][0]
+        print(f"I45 count={{n}}"); assert n == 4
+        print("I45_PASS")
+        s.stop()
+        """
+        f = tmp_path / "i45.py"
+        f.write_text(_tw.dedent(script))
+        _sp.run(
+            ["docker", "cp", str(f), f"{_MASTER}:/tmp/_i45.py"],
+            check=True,
+            capture_output=True,
+        )
+        out = _sp.run(
+            ["docker", "exec", _MASTER, "/opt/spark/bin/spark-submit", "/tmp/_i45.py"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        ).stdout
+        # The table's UC storage_location must be catalog-assigned (under __unitystorage).
+        loc = ""
+        try:
+            with _url.urlopen(f"{_UC}/tables/{cat}.{sch}.{tbl}", timeout=8) as r:
+                loc = _json.loads(r.read()).get("storage_location", "")
+        finally:
+            try:
+                _url.urlopen(
+                    _url.Request(f"{_UC}/tables/{cat}.{sch}.{tbl}", method="DELETE"),
+                    timeout=8,
+                )
+            except Exception:
+                pass
+        assert "I45_PASS" in out, f"catalog-managed Delta failed:\n{out[-1500:]}"
+        assert "__unitystorage" in loc, f"table not catalog-managed (loc={loc!r})"

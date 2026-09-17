@@ -31,7 +31,7 @@ s3.accessKey.0=your_seaweedfs_access_key
 s3.secretKey.0=your_seaweedfs_secret_key
 s3.sessionToken.0=not_used
 # Custom endpoint for SeaweedFS (comment out for real AWS S3)
-s3.endpoint.0=http://localhost:8333
+s3.endpoint.0=http://seaweedfs:8333
 
 # ============================================================================
 # Database Configuration

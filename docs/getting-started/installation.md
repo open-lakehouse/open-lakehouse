@@ -212,7 +212,7 @@ After setup, verify each component:
 | Check | Command | Expected |
 |-------|---------|----------|
 | Docker | `docker --version` | Version 20+ |
-| Docker Compose | `docker compose version` | Version 2+ |
+| Docker Compose | `docker compose version` | Version 2.24+ |
 | Poetry | `poetry --version` | Version 1.5+ |
 | PostgreSQL | `psql -h localhost -U lakehouse -d iceberg_catalog -c "SELECT 1;"` | Returns 1 |
 | SeaweedFS | `curl http://localhost:8333` | HTML response |

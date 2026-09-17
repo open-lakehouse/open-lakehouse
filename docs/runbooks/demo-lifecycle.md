@@ -6,7 +6,7 @@ If you're an LLM agent, prefer the skill files — they're tighter. If you're a 
 
 ## 0. Prereqs
 
-You need: Docker (Compose v2), Python 3.10+ with Poetry, `psql`, `jq`, `curl`, `nc`, ~20GB free disk. Most macOS / Linux dev machines have these.
+You need: Docker (Compose 2.24+), Python 3.10+ with Poetry, `psql`, `jq`, `curl`, `nc`, ~20GB free disk. Most macOS / Linux dev machines have these.
 
 ```bash
 docker version

@@ -5,7 +5,7 @@ Get the lakehouse stack running in 5 minutes.
 ## Prerequisites
 
 You need these installed:
-- Docker & Docker Compose v2
+- Docker & Docker Compose 2.24+ (the `env_file` `required:` field needs 2.24.0)
 - Python 3.10+
 - Poetry
 - PostgreSQL 16 (running)

@@ -33,6 +33,21 @@ What each overlay does, and why:
   MLflow) have those mappings reset. A checkpoint that needs host reachability publishes only
   what it needs, at an offset.
 
-`host.docker.internal` is used for the host-installed PostgreSQL and SeaweedFS, which live
-outside Compose in PR #0 (§1.10) and are reachable from a bridge network via the
-`host-gateway` mapping.
+## Storage (PostgreSQL + SeaweedFS) is shared Compose, not host-installed
+
+Since PR #13, PostgreSQL and SeaweedFS are **Compose services** (`docker-compose-storage.yml`)
+with named volumes — they are no longer host-installed. Storage is deliberately **unscoped**:
+one shared instance on the fixed published ports `localhost:5432` / `localhost:8333` that every
+run reaches, isolating instead by run-scoped **database and bucket names** inside it
+(`ol_test_<runid>_{mlflow,airflow,iceberg_catalog}`, bucket `ol-test-<runid>`).
+
+Consequences for the overlays:
+
+- There is **no `docker-compose-storage.test.yml`**, and `OVERLAY_BASE_SERVICES` omits `storage`.
+  `overlay_set_compose_args storage` special-cases to the base file only, so `start storage` /
+  `stop storage` (and the `start all` storage arm) work under an active overlay without a
+  missing-overlay-file error.
+- The run-scoped service overlays sit on a project-scoped bridge network with no published
+  ports, so they reach the shared storage from inside a container via
+  `host.docker.internal:5432` / `:8333` (the `host-gateway` mapping) — **on purpose**, because
+  the shared storage publishes those ports on the host.

@@ -1,0 +1,113 @@
+# Storage foundation — SeaweedFS (S3) + PostgreSQL 16, in Compose.
+# ==================================================================
+# PR #13 / Phase 1 (T-1.2): moves the object store and metastore that were
+# previously host-installed (brew seaweedfs; weed server ...; a host postgres)
+# into Compose on the shared lakehouse-network bridge, with NAMED VOLUMES.
+#
+# Start:  ./lakehouse start storage      (or: docker compose -f docker-compose-storage.yml up -d)
+# Then:   ./lakehouse ... (init-storage.sh bootstraps buckets/prefixes + DBs — T-1.8)
+#
+# Notes:
+# - Both services join `lakehouse-network` (the same project-scoped bridge Unity
+#   Catalog already uses), so in-network peers resolve them as `postgres` /
+#   `seaweedfs`. Until the rest of the stack is converted to the bridge (PR #13
+#   Phase 1, Checkpoint 2), host-mode services keep reaching them on the published
+#   host ports (localhost:5432 / :8333).
+# - SeaweedFS `s3conf.json` is written INSIDE the container from S3_ACCESS_KEY /
+#   S3_SECRET_KEY at startup — never bind-mounted — to dodge the Colima bind-mount
+#   drop documented in §2.5 (a bare `weed server -s3` allows anonymous access; the
+#   generated identities config makes it 403 correctly).
+# - Named volumes only (§2.5): postgres-data, seaweedfs-data.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-postgres}"
+      # Default maintenance DB = POSTGRES_USER's db; the mlflow / airflow /
+      # iceberg_catalog databases are created idempotently by init-storage.sh
+      # (T-1.8 / T-1.20a) rather than via a bind-mounted initdb script.
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER:-postgres}\" -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - lakehouse-network
+
+  seaweedfs:
+    # SeaweedFS S3-compatible object store (master+volume+filer+s3 in one binary).
+    # PINNED to 3.80 deliberately (PR #13 / Phase 2). SeaweedFS 4.x enforces
+    # X-Amz-Security-Token validation and rejects UC OSS credential vending's
+    # MANDATORY placeholder session token (`s3.sessionToken.0` must be non-empty,
+    # §2.5) with 403 InvalidAccessKeyId — breaking the primary UC-registered write
+    # path (measured on 4.00/4.30/4.40; -s3.iam=false doesn't help). 3.80 tolerates
+    # the token, so it stays until UC OSS or SeaweedFS resolves the conflict.
+    # Tradeoff: 3.80 does NOT enforce conditional PUT `If-None-Match: *` (S-04) —
+    # which only affects CONCURRENT multi-writer Delta commits (the local
+    # single-writer stack never does this). See the seaweedfs-ops skill.
+    image: chrislusf/seaweedfs:3.80
+    container_name: seaweedfs
+    ports:
+      - "8333:8333"      # S3 API (host-facing; UC uses 8080, so no collision here)
+    environment:
+      # Unified demo credential pair (matches .env.example, init-storage.sh, the
+      # connectivity/lifecycle test fallbacks, and I-09). A fresh clone works with
+      # `./lakehouse test` out of the box without hand-picking a key pair.
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY:-lakehouse_s3}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY:-lakehouse_s3_secret}"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mkdir -p /etc/seaweedfs
+        cat > /etc/seaweedfs/s3conf.json <<JSON
+        {
+          "identities": [
+            {
+              "name": "admin",
+              "credentials": [
+                { "accessKey": "$${S3_ACCESS_KEY}", "secretKey": "$${S3_SECRET_KEY}" }
+              ],
+              "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+            }
+          ]
+        }
+        JSON
+        exec weed server -s3 -dir=/data \
+          -s3.config=/etc/seaweedfs/s3conf.json \
+          -master.volumeSizeLimitMB=1024 -volume.max=0
+    volumes:
+      - seaweedfs-data:/data
+    healthcheck:
+      # The master HTTP (9333) returns 200 when weed is up. Use 127.0.0.1, NOT
+      # localhost: weed binds IPv4 only, and busybox resolves localhost to ::1
+      # first (nothing listening there) — so a localhost probe spuriously fails.
+      # The S3 port (8333) is unusable for health: it answers 403 to the
+      # anonymous probe, which wget treats as an error.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - lakehouse-network
+
+volumes:
+  postgres-data:
+    driver: local
+  seaweedfs-data:
+    driver: local
+
+networks:
+  lakehouse-network:
+    driver: bridge

@@ -118,3 +118,72 @@ def test_i48_mlflow_status_false_when_absent():
     if _running(STANDIN):
         pytest.skip("mlflow-server is running; negative case not applicable")
     assert _status_json()["services"]["mlflow"] is False
+
+
+# ---------------------------------------------------------------------------------
+# I-09 — MLflow 3.14 logs a run + artifact to S3 (SeaweedFS), readable back
+# ---------------------------------------------------------------------------------
+# Runs inside mlflow-server (has mlflow 3.14 + boto3). Proves the durability model:
+# run metadata in PostgreSQL, artifact bytes in S3 under mlflow-artifacts/. The
+# "survives restart" property is inherent (nothing is in-memory) — asserted by
+# reading the run + artifact back through a fresh client after logging.
+
+MLFLOW_CTR = "mlflow-server"
+
+
+def _mlflow_up() -> bool:
+    # Probe the published host port — the mlflow image has no curl, so an
+    # in-container curl probe would false-negative.
+    if not _running(MLFLOW_CTR):
+        return False
+    import urllib.request
+
+    try:
+        return (
+            urllib.request.urlopen("http://localhost:5000/health", timeout=5).getcode()
+            == 200
+        )
+    except Exception:
+        return False
+
+
+def test_i09_mlflow_314_run_artifact_in_s3():
+    if not _docker_ok():
+        pytest.skip("Docker not available")
+    if not _mlflow_up():
+        pytest.skip("mlflow-server not running/healthy")
+    script = (
+        "import mlflow, boto3, os, tempfile\n"
+        "mlflow.set_tracking_uri('http://localhost:5000')\n"
+        "assert mlflow.__version__.startswith('3.14'), mlflow.__version__\n"
+        "mlflow.set_experiment('i09')\n"
+        "with mlflow.start_run() as run:\n"
+        "    rid = run.info.run_id\n"
+        "    mlflow.log_param('cp','3'); mlflow.log_metric('acc',0.99)\n"
+        "    p=os.path.join(tempfile.mkdtemp(),'art.txt'); open(p,'w').write('cp3')\n"
+        "    mlflow.log_artifact(p)\n"
+        # Read S3 endpoint/creds/bucket from the mlflow container's own env rather
+        # than baking a credential pair — the container is configured from the
+        # unified demo creds, so this stays correct if they ever change.
+        "ep=os.environ.get('MLFLOW_S3_ENDPOINT_URL','http://seaweedfs:8333')\n"
+        "ak=os.environ.get('AWS_ACCESS_KEY_ID') or os.environ.get('S3_ACCESS_KEY','lakehouse_s3')\n"
+        "sk=os.environ.get('AWS_SECRET_ACCESS_KEY') or os.environ.get('S3_SECRET_KEY','lakehouse_s3_secret')\n"
+        "dest=os.environ.get('MLFLOW_ARTIFACTS_DESTINATION','s3://lakehouse/mlflow-artifacts')\n"
+        "bkt=dest.split('/')[2]\n"
+        "s3=boto3.client('s3',endpoint_url=ep,aws_access_key_id=ak,aws_secret_access_key=sk)\n"
+        "keys=[o['Key'] for o in s3.list_objects_v2(Bucket=bkt,"
+        "Prefix='mlflow-artifacts/').get('Contents',[]) if rid in o['Key']]\n"
+        "c=mlflow.tracking.MlflowClient()\n"
+        "r=c.get_run(rid); arts=[a.path for a in c.list_artifacts(rid)]\n"
+        "assert r.data.params.get('cp')=='3' and 'art.txt' in arts and any('art.txt' in k for k in keys), (keys,arts)\n"
+        "print('I09_PASS', mlflow.__version__)\n"
+    )
+    out = subprocess.run(
+        ["docker", "exec", MLFLOW_CTR, "python", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert (
+        "I09_PASS" in out.stdout
+    ), f"I-09 failed:\nSTDOUT{out.stdout[-800:]}\nSTDERR{out.stderr[-800:]}"

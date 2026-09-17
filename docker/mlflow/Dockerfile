@@ -7,7 +7,7 @@
 #
 # The AWS deploy uses a separate image under terraform/mlflow-ecs/docker (psql 16
 # for SNI + the AWS entrypoint). Keep this one simple.
-FROM ghcr.io/mlflow/mlflow:v3.13.0-full
+FROM ghcr.io/mlflow/mlflow:v3.14.0-full
 
 USER root
 

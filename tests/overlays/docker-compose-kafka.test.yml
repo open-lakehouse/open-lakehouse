@@ -5,18 +5,30 @@ services:
     network_mode: !reset null
     networks:
       - default
+    # Base publishes 2181:2181; drop it — reached in-network only, so the overlay
+    # never hijacks the production Zookeeper host port.
+    ports: !reset null
 
   kafka:
     container_name: kafka-${LAKEHOUSE_RESOURCE_SUFFIX}
     network_mode: !reset null
     networks:
       - default
+    # Base publishes 9092:19092; drop it — reached in-network only, so the overlay
+    # never hijacks the production Kafka host port (matches the MLflow overlay).
+    ports: !reset null
     environment:
       KAFKA_BROKER_ID: 1
-      # Reach the run-scoped Zookeeper and advertise the run-scoped broker name
-      # so in-network clients resolve it on the shared bridge network.
+      # Reach the run-scoped Zookeeper and advertise the run-scoped broker name so
+      # in-network clients resolve it on the shared bridge network. The base file
+      # uses the INTERNAL/EXTERNAL dual-listener scheme; with no published host
+      # port we advertise ONLY the INTERNAL listener (a bare PLAINTEXT listener no
+      # longer matches KAFKA_LISTENERS and would fail to start, and advertising
+      # EXTERNAL://localhost:9092 would be a lie now that nothing is published).
+      # The EXTERNAL listener inherited from the base still binds internally; it is
+      # simply not advertised, which Kafka permits.
       KAFKA_ZOOKEEPER_CONNECT: zookeeper-${LAKEHOUSE_RESOURCE_SUFFIX}:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-${LAKEHOUSE_RESOURCE_SUFFIX}:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-${LAKEHOUSE_RESOURCE_SUFFIX}:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1

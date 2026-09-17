@@ -439,7 +439,15 @@ class TestU59InventoryExcludesOverlays:
         # ol-test-* / *.test.yml volumes must never appear in a production plan.
         vols = {r["name"] for r in _plan("--all") if r["target"] == "volume"}
         assert not any(v.startswith("ol-test-") for v in vols)
-        assert vols <= {"mlflow-data", "uc-data", "uc-logs", "spark-data", "spark-logs"}
+        assert vols <= {
+            "mlflow-data",
+            "uc-data",
+            "uc-logs",
+            "spark-data",
+            "spark-logs",
+            "postgres-data",
+            "seaweedfs-data",
+        }
 
 
 # --- U-66b: the semantic gate is wired into reset --------------------------------

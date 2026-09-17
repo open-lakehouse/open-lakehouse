@@ -1,6 +1,6 @@
 ---
 name: unity-catalog-oss
-description: Unity Catalog OSS 0.4.x — the only catalog in this stack. Load when configuring the UC server, creating catalogs/schemas/tables via REST, or wiring a non-Spark engine (DuckDB, Trino) against UC. Covers the REST API surface, credential vending, and the no-JDBC-catalog rule.
+description: Unity Catalog OSS 0.5.0 — the only catalog in this stack. Load when configuring the UC server, creating catalogs/schemas/tables via REST, or wiring a non-Spark engine (DuckDB, Trino) against UC. Covers the REST API surface, credential vending, catalog-managed Delta, and the no-JDBC-catalog rule.
 ---
 
 # Unity Catalog OSS
@@ -19,7 +19,7 @@ UC OSS runs as a Java server. The compose definition is `docker-compose-unity-ca
 | `http://localhost:8081/api/2.1/unity-catalog/iceberg/v1/config` | Iceberg REST catalog (Spark uses this) |
 | `http://localhost:8081/api/2.1/unity-catalog/iceberg/v1/namespaces` | Iceberg REST namespace ops |
 
-UC 0.4.x speaks the **Iceberg REST Catalog spec** at the `/iceberg/v1/*` path. Any Iceberg client (Spark, PyIceberg, DuckDB via `iceberg` extension) can point at this URL.
+UC 0.5.0 speaks the **Iceberg REST Catalog spec** at the `/iceberg/v1/*` path. Any Iceberg client (Spark, PyIceberg, DuckDB via `iceberg` extension) can point at this URL.
 
 ## Spark config
 
@@ -52,7 +52,7 @@ curl -X POST http://localhost:8081/api/2.1/unity-catalog/schemas \
 curl "http://localhost:8081/api/2.1/unity-catalog/tables?catalog_name=iceberg&schema_name=bronze" | jq .
 ```
 
-Auth: 0.4.x ships with no auth by default for local. Don't add a bearer token until you've wired UC's auth provider — most demos run unauth.
+Auth: 0.5.0 ships with no auth by default for local. Don't add a bearer token until you've wired UC's auth provider — most demos run unauth.
 
 ## Backing store
 
@@ -87,15 +87,24 @@ con.sql("SELECT * FROM uc.bronze.orders LIMIT 10;")
 
 Trino, Dremio: same pattern — register UC's `/iceberg/v1/` URL as an Iceberg REST catalog.
 
-## Limitations of UC OSS 0.4.x (don't promise users these)
+## Limitations of UC OSS 0.5.0 (don't promise users these)
 
 - Auth providers (OAuth, SAML) are partial.
 - Lineage events (system tables) are minimal compared to managed Databricks UC.
 - Cross-catalog references work; cross-deployment federation does not.
 
-## Write-side reality (verified 2026-05-19, v0.4.0 and v0.4.1)
+## Write-side reality (verified 2026-05-19 on v0.4.0/v0.4.1; re-confirmed on official v0.5.0)
 
-UC OSS's write story is partial and format-specific. What was actually tested:
+UC OSS's write story is partial and format-specific. The measurements below hold
+identically on the official `unitycatalog/unitycatalog:v0.5.0` image the stack
+now runs (PR #13 / T-1.17): Iceberg writes stay upstream-blocked, Delta writes
+work. 0.5.0 adds **catalog-managed Delta** — a catalog with a `storage_root`
+assigns table locations, so SQL `.sql` SDP transformations materialize with no
+explicit `location`. This works from Spark **only** on Delta 4.3.1 + the UC 0.5.x
+connector family (connector 0.4.1 + client 0.5.1 + hadoop 0.5.1), and the table
+needs the two `delta.checkpoint.writeStats*` properties — see [[sdp]] →
+`unity-catalog.md` for the exact recipe (verified PR #13 / I-45). What was
+actually tested:
 
 - **Iceberg is read-only.** UC's Iceberg REST adapter (`/iceberg/v1/...`)
   advertises only `GET`/`HEAD` endpoints — no `POST` for namespace or table

@@ -48,12 +48,13 @@ Spark bugs:
    are both ignored. Pre-download required jars to `jars/`
    (`scripts/tools/download-jars.sh`) and pass `--jars
    /opt/spark/jars-extra/foo.jar,/opt/spark/jars-extra/bar.jar`.
-3. **Bootstrap services as `localhost:HOSTPORT`, not service names.**
-   Spark, Kafka, Postgres, SeaweedFS, and Unity Catalog all run on the host
-   network. From inside `spark-master-41`, `kafka:9092` does **not** resolve
-   — it's `localhost:9092`. Same for `8081` (UC), `8333` (SeaweedFS), `5432`
-   (Postgres). Pass `-e KAFKA_BOOTSTRAP_SERVERS=localhost:9092` etc. on the
-   `docker exec`.
+3. **In-container, address peers by service name.** The stack runs on the
+   `lakehouse-network` bridge, so from inside `spark-master-41` use
+   `kafka:9092`, `unity-catalog:8080`, `seaweedfs:8333`, `postgres:5432`,
+   `spark-master-41:7078`. The `localhost:HOSTPORT` form is for **host** clients
+   (`sc://localhost:15002`, `localhost:8081`, `localhost:8333`, `localhost:9092`).
+   These service-name endpoints are already wired in `spark-defaults.conf`, so a
+   normal `spark-submit` needs no `-e KAFKA_BOOTSTRAP_SERVERS=…` override.
 
 Loud-but-ignorable on startup: `ClassNotFoundException` for
 `IcebergSparkSessionExtensions`, `DeltaSparkSessionExtension`, and
@@ -103,7 +104,7 @@ w = Window.partitionBy("order_id").orderBy(f.col("event_ts").desc())
 deduped = df.withColumn("_rn", f.row_number().over(w)).where("_rn = 1").drop("_rn")
 
 # Write to Unity Catalog as DELTA — the primary write path on this stack.
-# The `iceberg.` catalog is READ-ONLY (UC OSS 0.4.x exposes no Iceberg write
+# The `iceberg.` catalog is READ-ONLY (UC OSS 0.5.0 exposes no Iceberg write
 # endpoints — CLAUDE.md Golden Rule #1); read Iceberg via `iceberg.<schema>.<t>`.
 deduped.writeTo("unity.silver.orders").using("delta").createOrReplace()
 
@@ -132,8 +133,12 @@ spark.sql("""
 
 ## When to use which file format
 
-- **Iceberg** for batch + slowly-changing dimensions, time travel, schema evolution. Default for this stack's medallion path.
-- **Delta** when interop with Databricks-managed destinations is required (terraform-databricks/ target).
-- **Parquet (raw)** only as a landing zone; promote to Iceberg/Delta on bronze read.
+- **Delta** — the **write path** on this stack. All demos (medallion, streaming)
+  write Delta into Unity Catalog (`unity.<schema>.<table>`). Time travel, schema
+  evolution, catalog-managed tables, and the Databricks hand-off all live here.
+- **Iceberg** — **read-only** on this stack (UC OSS exposes no Iceberg write).
+  Use `iceberg.<schema>.<table>` for cross-engine reads (DuckDB/Trino/PyIceberg)
+  of tables registered via UC. Do not target it as a write sink.
+- **Parquet (raw)** only as a landing zone; promote to Delta on bronze read.
 
 See [[iceberg-ops]] and [[delta-ops]] skills for per-format ops.

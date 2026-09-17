@@ -277,13 +277,15 @@ def post(path, body):
     r = urllib.request.Request(api + path, data=json.dumps(body).encode(),
         headers={{"Content-Type": "application/json"}}, method="POST")
     urllib.request.urlopen(r, timeout=10)
+# UC 0.5.0 validates the column type descriptor — an empty type_json 400s.
+tj = json.dumps({{"name": "id", "type": "integer", "nullable": True, "metadata": {{}}}})
 post("/catalogs", {{"name": "{CAT}"}})
 post("/schemas", {{"name": "{SCH}", "catalog_name": "{CAT}"}})
 post("/tables", {{"name": "{TBL}", "catalog_name": "{CAT}", "schema_name": "{SCH}",
     "table_type": "EXTERNAL", "data_source_format": "DELTA",
     "storage_location": "s3://{env['bucket']}/warehouse/{TBL}",
     "columns": [{{"name": "id", "type_text": "int", "type_name": "INT",
-                 "type_json": "{{}}", "position": 0, "nullable": True}}]}})
+                 "type_json": tj, "position": 0, "nullable": True}}]}})
 print("built")
 """
     r = _uc_py(env, script)

@@ -47,6 +47,43 @@ def docker_available() -> bool:
         return False
 
 
+@pytest.fixture(scope="session", autouse=True)
+def composed_storage(docker_available):
+    """Ensure the Composed storage layer (SeaweedFS + PostgreSQL) is up.
+
+    PR #13 / T-1.20d: storage moved from host-installed into Compose
+    (docker-compose-storage.yml). The lifecycle / E-07 tests reach it via the
+    published host ports (localhost:5432 / :8333) with run-scoped names, so it
+    must be running or those tests would silently skip (a skip does not count as
+    a pass, §1.17.8). Idempotent: only starts storage when the ports are not
+    already listening, and never tears the shared stack down.
+    """
+    import os
+    import socket
+    import subprocess
+
+    if not docker_available:
+        yield False
+        return
+
+    def _listening(port: int) -> bool:
+        with socket.socket() as s:
+            s.settimeout(1)
+            return s.connect_ex(("localhost", port)) == 0
+
+    if not (_listening(5432) and _listening(8333)):
+        root = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        subprocess.run(
+            [os.path.join(root, "lakehouse"), "start", "storage"],
+            cwd=root,
+            capture_output=True,
+            timeout=180,
+        )
+    yield True
+
+
 @pytest.fixture(scope="session")
 def postgres_container(docker_available) -> Generator:
     """Isolated PostgreSQL — used as Unity Catalog's backing store."""

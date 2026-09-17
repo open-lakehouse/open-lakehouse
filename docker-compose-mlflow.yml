@@ -15,52 +15,66 @@ services:
     build:
       context: .
       dockerfile: docker/mlflow/Dockerfile
-    image: lakehouse-mlflow:3.13.0
+    image: lakehouse-mlflow:3.14.0
     container_name: mlflow-server
     ports:
-      - "5000:5000"
+      - "5000:5000"   # tracking
+      - "5001:5001"   # AI gateway
     environment:
       # Postgres connection — entrypoint provisions role + db as superuser
       # then hands MLflow its own credentials. Superuser creds come from .env.
-      POSTGRES_HOST: "${POSTGRES_HOST:-localhost}"
+      # On the bridge, the metastore is the `postgres` service.
+      POSTGRES_HOST: "postgres"
       POSTGRES_PORT: "${POSTGRES_PORT:-5432}"
       POSTGRES_USER: "${POSTGRES_USER:-postgres}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-}"
       MLFLOW_PG_USER: "${MLFLOW_PG_USER:-mlflow}"
       MLFLOW_PG_PASS: "${MLFLOW_PG_PASS:-mlflow_password}"
       MLFLOW_PG_DB: "${MLFLOW_PG_DB:-mlflow}"
-      # Artifact storage: SeaweedFS via S3
+      # Artifact storage: SeaweedFS via S3 (bridge service name)
       MLFLOW_ARTIFACTS_DESTINATION: "s3://lakehouse/mlflow-artifacts"
-      AWS_ACCESS_KEY_ID: "${S3_ACCESS_KEY:-admin}"
-      AWS_SECRET_ACCESS_KEY: "${S3_SECRET_KEY:-admin_password}"
-      MLFLOW_S3_ENDPOINT_URL: "http://localhost:8333"
+      # Unified demo credential pair (see docker-compose-storage.yml).
+      AWS_ACCESS_KEY_ID: "${S3_ACCESS_KEY:-lakehouse_s3}"
+      AWS_SECRET_ACCESS_KEY: "${S3_SECRET_KEY:-lakehouse_s3_secret}"
+      MLFLOW_S3_ENDPOINT_URL: "http://seaweedfs:8333"
       # AI Gateway config
       MLFLOW_GATEWAY_CONFIG: "/config/gateway-config.yml"
     volumes:
       - ./config/mlflow:/config:ro
       - mlflow-data:/mlflow
-    network_mode: host
+    networks:
+      - lakehouse-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      # The ghcr.io/mlflow/mlflow:*-full image ships NO curl, so a curl-based
+      # check leaves the container perpetually "unhealthy" even though the server
+      # is fine. Python is always present — use it to probe /health.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').getcode()==200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 20s
     restart: unless-stopped
 
   mlflow-agent:
     image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
     container_name: spark-mlflow-agent
     user: root
-    network_mode: "host"
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
+    networks:
+      - lakehouse-network
+    # Ollama runs on the HOST (not a Compose service), so this sidecar reaches it
+    # via the host-gateway — the one legitimate external-host dependency.
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
-      - MLFLOW_TRACKING_URI=http://localhost:5000
-      - SPARK_MASTER=spark://localhost:7078
-      # Full OSS: GPT-OSS 20B via Ollama. No API keys needed.
+      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - SPARK_MASTER=spark://spark-master-41:7078
+      # Full OSS: GPT-OSS 20B via Ollama on the host. No API keys needed.
       - LLM_MODEL=gpt-oss:20b
       - LLM_PROVIDER=openai
-      - OLLAMA_BASE_URL=http://localhost:11434/v1
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
       - PYTHONPATH=/opt/spark/python:/opt/spark/python/lib/py4j-0.10.9.9-src.zip
       - SPARK_HOME=/opt/spark
     volumes:
@@ -79,3 +93,7 @@ services:
 
 volumes:
   mlflow-data:
+
+networks:
+  lakehouse-network:
+    driver: bridge

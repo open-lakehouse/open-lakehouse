@@ -1,7 +1,7 @@
 -- Gold: orders and revenue per hour and city. Pure SQL aggregation over silver.
 CREATE MATERIALIZED VIEW gold_hourly_metrics
 USING delta
-TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported')
+TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported', 'delta.checkpoint.writeStatsAsJson' = 'true', 'delta.checkpoint.writeStatsAsStruct' = 'true')
 AS
 SELECT
   event_date,

@@ -3,7 +3,7 @@
 -- the table references below.
 CREATE MATERIALIZED VIEW orders_enriched
 USING delta
-TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported')
+TBLPROPERTIES ('delta.feature.catalogManaged' = 'supported', 'delta.checkpoint.writeStatsAsJson' = 'true', 'delta.checkpoint.writeStatsAsStruct' = 'true')
 AS
 WITH parsed AS (
   SELECT

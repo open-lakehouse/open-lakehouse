@@ -49,7 +49,7 @@ S3_KEY = os.environ.get("S3_ACCESS_KEY", "lakehouse_s3")
 S3_SECRET = os.environ.get("S3_SECRET_KEY", "lakehouse_s3_secret")
 S3_ENDPOINT_HOST = "http://localhost:8333"
 PG_IMAGE = os.environ.get("LAKEHOUSE_PG_CLIENT_IMAGE", "postgres:15-alpine")
-UC_IMAGE = os.environ.get("LAKEHOUSE_UC_IMAGE", "newfrontdocker/unitycatalog:v0.4.1")
+UC_IMAGE = os.environ.get("LAKEHOUSE_UC_IMAGE", "unitycatalog/unitycatalog:v0.5.0")
 PY_IMAGE = os.environ.get("LAKEHOUSE_HTTP_IMAGE", "python:3-alpine")
 
 
@@ -257,13 +257,15 @@ def post(path, body, ok_conflict=True):
     except urllib.error.HTTPError as e:
         if not (ok_conflict and e.code in (400, 409)):
             raise
+# UC 0.5.0 validates the column type descriptor — an empty type_json 400s.
+tj = json.dumps({{"name": "id", "type": "integer", "nullable": True, "metadata": {{}}}})
 post("/catalogs", {{"name": "{cat}"}})
 post("/schemas", {{"name": "{sch}", "catalog_name": "{cat}"}})
 post("/tables", {{"name": "{tbl}", "catalog_name": "{cat}", "schema_name": "{sch}",
     "table_type": "EXTERNAL", "data_source_format": "DELTA",
     "storage_location": "{location}",
     "columns": [{{"name": "id", "type_text": "int", "type_name": "INT",
-                 "type_json": "{{}}", "position": 0, "nullable": True}}]}},
+                 "type_json": tj, "position": 0, "nullable": True}}]}},
     ok_conflict=False)
 print("ok")
 """

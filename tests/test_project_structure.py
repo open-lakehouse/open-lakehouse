@@ -5,6 +5,8 @@ Verifies the expected directory layout for the open-lakehouse demo platform.
 
 import os
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -174,3 +176,65 @@ class TestAIScaffolding:
     def test_lifecycle_skill_present(self):
         skill = PROJECT_ROOT / ".claude/skills/lakehouse-lifecycle/SKILL.md"
         assert skill.exists(), "lakehouse-lifecycle skill missing"
+
+
+class TestSkillFrontmatter:
+    """U-22: every .claude/skills/*/SKILL.md has YAML frontmatter with `name:` and
+    `description:`, and the name matches its directory."""
+
+    def _skills(self):
+        root = PROJECT_ROOT / ".claude" / "skills"
+        return [p for p in root.iterdir() if (p / "SKILL.md").exists()]
+
+    def test_every_skill_has_valid_frontmatter(self):
+        offenders = []
+        for d in self._skills():
+            text = (d / "SKILL.md").read_text()
+            m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+            if not m:
+                offenders.append(f"{d.name}: no frontmatter block")
+                continue
+            fm = m.group(1)
+            name = re.search(r"^name:\s*(.+)$", fm, re.M)
+            desc = re.search(r"^description:\s*(.+)$", fm, re.M)
+            if not name:
+                offenders.append(f"{d.name}: missing name:")
+            elif name.group(1).strip() != d.name:
+                offenders.append(f"{d.name}: name '{name.group(1).strip()}' != dir")
+            if not desc or not desc.group(1).strip():
+                offenders.append(f"{d.name}: missing/empty description:")
+        assert not offenders, "skill frontmatter issues: " + "; ".join(offenders)
+
+
+class TestConnectivityScriptsLint:
+    """U-10: the new Phase 2 connectivity scripts are Ruff- and Black-clean.
+    Skips a linter that isn't installed (pre-commit enforces it in CI)."""
+
+    SCRIPTS = sorted(
+        str(p) for p in (PROJECT_ROOT / "scripts" / "connectivity").glob("test-s3-*.py")
+    ) + [str(PROJECT_ROOT / "scripts" / "connectivity" / "test-warehouse-layout.py")]
+    TARGETS = SCRIPTS + [
+        str(
+            PROJECT_ROOT / "scripts" / "connectivity" / "test-presigned-host-rewrite.py"
+        )
+    ]
+
+    def test_ruff_clean(self):
+        import pytest
+
+        if shutil.which("ruff") is None:
+            pytest.skip("ruff not installed")
+        r = subprocess.run(
+            ["ruff", "check", *self.TARGETS], capture_output=True, text=True
+        )
+        assert r.returncode == 0, f"ruff findings:\n{r.stdout}\n{r.stderr}"
+
+    def test_black_clean(self):
+        import pytest
+
+        if shutil.which("black") is None:
+            pytest.skip("black not installed")
+        r = subprocess.run(
+            ["black", "--check", *self.TARGETS], capture_output=True, text=True
+        )
+        assert r.returncode == 0, f"black would reformat:\n{r.stderr}"

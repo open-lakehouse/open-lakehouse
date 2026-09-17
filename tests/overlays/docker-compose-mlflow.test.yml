@@ -15,8 +15,9 @@ services:
     # deep-merges from the base compose file, so no credentials are duplicated
     # into this overlay.
     environment:
-      # host-installed PostgreSQL / SeaweedFS live outside Compose (plan 1.10);
-      # reach them via the host-gateway from the bridge network.
+      # PostgreSQL / SeaweedFS are shared Compose services on the fixed published
+      # host ports 5432/8333 (docker-compose-storage.yml), NOT host-installed. This
+      # bridge-networked overlay reaches them via the host-gateway on purpose.
       POSTGRES_HOST: "host.docker.internal"
       MLFLOW_S3_ENDPOINT_URL: "http://host.docker.internal:8333"
       # Run-scoped tracking database and artifact bucket.

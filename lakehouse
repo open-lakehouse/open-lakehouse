@@ -154,23 +154,27 @@ preflight_checks() {
 
     echo -e "\n${YELLOW}Running preflight checks...${NC}"
 
-    # Check PostgreSQL connection
+    # Check PostgreSQL. Storage is now a Compose service that `start storage`
+    # bootstraps, so a COLD preflight must NOT demand it already be up (Bugbot
+    # #157) — "not running yet" is a hint, not an error. When it IS up, probe it
+    # via pg_psql (host client if present, else a version-matched dockerized
+    # client — never a bare host `psql`, Bugbot #164). Only probe deeper when the
+    # port is actually listening, so a cold preflight never pulls a client image.
     if [ "$check_postgres" = true ]; then
-        local pg_user="${POSTGRES_USER:-postgres}"
-        local pg_pass="${POSTGRES_PASSWORD:-}"
-        local pg_host="${POSTGRES_HOST:-localhost}"
-        pg_host="${pg_host/host.docker.internal/localhost}"
-
-        if PGPASSWORD="$pg_pass" psql -h "$pg_host" -U "$pg_user" -d iceberg_catalog -c "SELECT 1;" >/dev/null 2>&1; then
+        local pg_port="${POSTGRES_PORT:-5432}"
+        if ! nc -z localhost "$pg_port" 2>/dev/null; then
+            echo -e "   ${YELLOW}-${NC} PostgreSQL not running yet (OK for a cold preflight)"
+            echo -e "   ${YELLOW}→ It will be started by: ./lakehouse start storage (or start all)${NC}"
+        elif pg_psql -d iceberg_catalog -c "SELECT 1;" >/dev/null 2>&1; then
             echo -e "   ${GREEN}✓${NC} PostgreSQL connection OK"
         else
-            echo -e "   ${RED}✗${NC} PostgreSQL connection failed"
-            echo -e "   ${YELLOW}→ Check credentials in .env and ensure PostgreSQL is running${NC}"
-            has_errors=1
+            echo -e "   ${YELLOW}!${NC} PostgreSQL is listening on $pg_port but the auth/db check failed"
+            echo -e "   ${YELLOW}→ Check POSTGRES_USER/PASSWORD in .env; iceberg_catalog is created by 'start storage'${NC}"
         fi
     fi
 
-    # Check SeaweedFS S3 endpoint
+    # Check SeaweedFS S3 endpoint. Same cold-preflight rule as PostgreSQL: absent
+    # is a hint, not a blocker (Bugbot #157).
     if [ "$check_seaweedfs" = true ]; then
         local s3_endpoint="${S3_ENDPOINT:-http://localhost:8333}"
         s3_endpoint="${s3_endpoint/host.docker.internal/localhost}"
@@ -178,9 +182,8 @@ preflight_checks() {
         if curl -s --connect-timeout 5 "$s3_endpoint" > /dev/null 2>&1; then
             echo -e "   ${GREEN}✓${NC} SeaweedFS S3 endpoint OK"
         else
-            echo -e "   ${RED}✗${NC} SeaweedFS S3 endpoint not responding ($s3_endpoint)"
-            echo -e "   ${YELLOW}→ Ensure SeaweedFS is running${NC}"
-            has_errors=1
+            echo -e "   ${YELLOW}-${NC} SeaweedFS S3 endpoint not running yet (OK for a cold preflight)"
+            echo -e "   ${YELLOW}→ It will be started by: ./lakehouse start storage (or start all)${NC}"
         fi
     fi
 
@@ -333,6 +336,50 @@ wait_for_services() {
     fi
 }
 
+# Storage (PostgreSQL + SeaweedFS) is deliberately UNSCOPED — one shared instance
+# on fixed host ports with FIXED container names: docker-compose-storage.yml uses
+# `container_name: postgres` / `seaweedfs`, `overlay_set_compose_args storage` uses
+# the base file only, and init-storage.sh defaults POSTGRES_CONTAINER=postgres. Its
+# container names must therefore NOT pass through resolve_container_name — under an
+# active overlay that would append the run suffix (`postgres-<runid>`) and point
+# docker exec/logs/ps at a container that is never created, breaking `start storage`
+# / `start all` / `start mlflow` / `start airflow`.
+get_storage_postgres_container()  { echo "postgres"; }
+get_storage_seaweedfs_container() { echo "seaweedfs"; }
+
+# Wait until the Composed PostgreSQL is actually accepting connections — health,
+# not merely an open TCP port (`nc -z` passes before the server is ready). Probes
+# pg_isready INSIDE the postgres container, so no host psql client is needed.
+#
+# Each service is its own compose file and `postgres` lives only in
+# docker-compose-storage.yml, so a cross-file `depends_on: postgres` would make a
+# plain `docker compose -f docker-compose-mlflow.yml up` fail with "undefined
+# service postgres". This CLI-side gate gives the same "don't start until Postgres
+# is healthy" guarantee while keeping every compose file independently runnable.
+# Returns non-zero if the postgres container isn't running or never becomes ready.
+wait_for_postgres_ready() {
+    local max_attempts=${1:-60}
+    local ctr
+    ctr=$(get_storage_postgres_container)
+    if ! is_container_running "$ctr"; then
+        echo -e "   ${RED}✗${NC} PostgreSQL container ($ctr) is not running"
+        echo -e "   ${YELLOW}→ Start storage first: ./lakehouse start storage (or ./lakehouse start all)${NC}"
+        return 1
+    fi
+    local attempt=1
+    while [ $attempt -le "$max_attempts" ]; do
+        if docker exec "$ctr" pg_isready -U "${POSTGRES_USER:-postgres}" -d postgres >/dev/null 2>&1; then
+            echo -e "   ${GREEN}✓${NC} PostgreSQL ready"
+            return 0
+        fi
+        printf "   Waiting for PostgreSQL... (%d/%d)\r" "$attempt" "$max_attempts"
+        sleep 1
+        ((attempt++))
+    done
+    echo -e "   ${RED}✗${NC} PostgreSQL did not become ready (timeout after ${max_attempts}s)"
+    return 1
+}
+
 # Fixed Spark 4.1 constants (this repo is Spark-4.1-only).
 # shellcheck disable=SC2034  # documentary constant; get_spark_* below are the interface
 SPARK_VERSION="4.1"
@@ -392,7 +439,7 @@ check_service() {
     local service=$1
     local port=$2
     local name=$3
-    
+
     if nc -z localhost $port 2>/dev/null; then
         echo -e "${GREEN}✓${NC} $name (port $port)"
         return 0
@@ -436,10 +483,11 @@ cmd_status_json() {
     # Container names resolve through the overlay layer — identical to the base
     # literals on the default path except the allow-listed mlflow->mlflow-server fix
     # (T-1.5.11), and run-scoped when a test overlay is active (docker ps sees the
-    # suffixed names). Host-service and localhost health PORTS stay at their fixed
-    # values here: PostgreSQL/SeaweedFS are host-installed (always 5432/8333), and
-    # wiring resolve_port into localhost probes only pays off once the overlay
-    # publishes host-facing ports — deferred to the E-07 work (Checkpoint 7).
+    # suffixed names). PostgreSQL and SeaweedFS are now Compose services
+    # (docker-compose-storage.yml, PR #13/T-1.2) publishing 5432/8333 to the host.
+    # Storage has NO test overlay, so it always publishes the fixed ports and is
+    # never port-offset — probe them directly (matches `__resolve`, which hardcodes
+    # them). Using resolve_port here would wrongly offset under an active overlay.
     local pg_ok=$(is_service_healthy 5432 && echo "true" || echo "false")
     local s3_ok=$(is_service_healthy 8333 && echo "true" || echo "false")
     local spark_master=$(is_container_running "$(resolve_container_name spark-master-41)" && echo "true" || echo "false")
@@ -500,9 +548,11 @@ cmd_status_human() {
     airflow_trig_ct=$(resolve_container_name airflow-triggerer)
     mlflow_ct=$(resolve_container_name mlflow)
 
-    echo -e "\n${YELLOW}System Services:${NC}"
-    check_service postgres 5432 "PostgreSQL"
-    check_service seaweedfs 8333 "SeaweedFS"
+    echo -e "\n${YELLOW}Storage (SeaweedFS + PostgreSQL):${NC}"
+    check_container "$(get_storage_postgres_container)" || true
+    check_service postgres "5432" "PostgreSQL"
+    check_container "$(get_storage_seaweedfs_container)" || true
+    check_service seaweedfs "8333" "SeaweedFS S3"
 
     echo -e "\n${YELLOW}Unity Catalog:${NC}"
     check_container "$uc_ct" && check_service uc 8081 "Unity Catalog REST API" || true
@@ -537,6 +587,7 @@ cmd_status_human() {
     echo "  MLflow:           5000 (Tracking), 5001 (AI Gateway)"
 
     echo -e "\n${YELLOW}Configurations:${NC}"
+    echo "  Storage:         docker-compose-storage.yml"
     echo "  Spark:           docker-compose-spark41.yml"
     echo "  Kafka:           docker-compose-kafka.yml"
     echo "  Unity Catalog:   docker-compose-unity-catalog.yml"
@@ -652,6 +703,24 @@ check_ports_for_service() {
             ;;
     esac
 
+    case $service in
+        storage)
+            if ! check_port_available "5432" "$(get_storage_postgres_container)"; then
+                echo -e "  ${RED}✗${NC} Port 5432 (PostgreSQL) blocked by another process"
+                has_conflicts=1
+            else
+                echo -e "  ${GREEN}✓${NC} Port 5432 (PostgreSQL) available"
+            fi
+
+            if ! check_port_available "8333" "$(get_storage_seaweedfs_container)"; then
+                echo -e "  ${RED}✗${NC} Port 8333 (SeaweedFS S3) blocked by another process"
+                has_conflicts=1
+            else
+                echo -e "  ${GREEN}✓${NC} Port 8333 (SeaweedFS S3) available"
+            fi
+            ;;
+    esac
+
     if [ $has_conflicts -eq 1 ]; then
         echo -e "\n${RED}Port conflicts detected.${NC}"
         echo -e "${YELLOW}→ Stop conflicting services or use different ports${NC}"
@@ -669,12 +738,51 @@ cmd_start() {
     local service=$1
     local spark_port=$(get_spark_port)
 
+    # A missing .env makes Compose interpolate blank credentials (POSTGRES_USER,
+    # S3 keys, ...) and services then fail obscurely deep in startup. Since
+    # env_file is `required: false` (so `docker compose config` renders without a
+    # .env), guard it here instead: fail fast with a clear pointer to setup.
+    # LAKEHOUSE_ENV_FILE (test overlays) substitutes for .env and is trusted.
+    if [ -z "${LAKEHOUSE_ENV_FILE:-}" ] && [ ! -f "$PROJECT_ROOT/.env" ]; then
+        echo -e "${RED}✗ No .env file found — services need credentials.${NC}"
+        echo -e "   ${YELLOW}→ Run './lakehouse setup' first to generate .env.${NC}"
+        return 1
+    fi
+
     # Check port availability before starting
     if ! check_ports_for_service "$service"; then
         echo -e "\n${RED}Aborting start due to port conflicts.${NC}"
         return 1
     fi
     echo ""
+
+    case $service in
+        storage|all)
+            # `all` starts storage FIRST (this arm runs before the spark/kafka
+            # arms below). Since PR #13 moved PostgreSQL/SeaweedFS into Compose,
+            # `start all` must bring them up — otherwise Spark/UC/Delta come up
+            # pointing at an absent metastore/object store.
+            echo -e "${YELLOW}Starting storage (SeaweedFS + PostgreSQL)...${NC}"
+            overlay_set_compose_args storage || return 1
+            docker compose "${OVERLAY_COMPOSE_ARGS[@]}" up -d
+            # pg_isready (not just `nc -z`) so the bootstrap below only runs once
+            # PostgreSQL truly accepts connections.
+            wait_for_postgres_ready 60 || return 1
+            wait_for_service "SeaweedFS S3" "nc -z localhost 8333" 60
+            echo -e "${YELLOW}Bootstrapping buckets / prefixes / databases...${NC}"
+            # Fail the start if bootstrap fails: init-storage.sh now needs no host
+            # aws/psql (dockerized fallbacks + `docker exec` for psql), so a failure
+            # here is a real error, not a missing-tool warning. Continuing would
+            # bring the rest of the stack up against an un-bootstrapped store.
+            if bash scripts/tools/init-storage.sh; then
+                echo -e "${GREEN}Storage ready.${NC}"
+            else
+                echo -e "${RED}✗${NC} init-storage.sh failed — storage was NOT bootstrapped"
+                echo -e "${YELLOW}→ Check the output above; ensure Docker is reachable, then re-run './lakehouse start storage'${NC}"
+                return 1
+            fi
+            ;;
+    esac
 
     case $service in
         spark|all)
@@ -711,6 +819,10 @@ cmd_start() {
     case $service in
         airflow)
             echo -e "${YELLOW}Starting Airflow...${NC}"
+            # airflow-init creates its DB in the Composed PostgreSQL and the
+            # scheduler/webserver need it too — gate on Postgres health so they
+            # don't crash-loop against an absent metastore.
+            wait_for_postgres_ready 60 || return 1
             mkdir -p logs/airflow
             overlay_set_compose_args airflow || return 1
             docker compose "${OVERLAY_COMPOSE_ARGS[@]}" up -d --build
@@ -723,6 +835,9 @@ cmd_start() {
     case $service in
         mlflow)
             echo -e "${YELLOW}Starting MLflow...${NC}"
+            # The MLflow entrypoint provisions its role + DB in the Composed
+            # PostgreSQL, so gate on Postgres health (else it crash-loops).
+            wait_for_postgres_ready 60 || return 1
             overlay_set_compose_args mlflow || return 1
             docker compose "${OVERLAY_COMPOSE_ARGS[@]}" up -d
             wait_for_service "MLflow" "curl -s http://localhost:5000/health" 60
@@ -731,10 +846,21 @@ cmd_start() {
     esac
 
     case $service in
-        spark|kafka|all|unity-catalog|uc|airflow|mlflow)
+        notebooks)
+            # Opt-in only (deliberately NOT part of `start all`), mirroring `stop
+            # notebooks`. Needed so a Jupyter stopped via the CLI (or quiesced by
+            # `reset`) can be brought back — reset_restore_services calls `cmd_start`.
+            echo -e "${YELLOW}Starting notebooks (Jupyter)...${NC}"
+            overlay_set_compose_args notebooks || return 1
+            docker compose "${OVERLAY_COMPOSE_ARGS[@]}" up -d
+            ;;
+    esac
+
+    case $service in
+        storage|spark|kafka|all|unity-catalog|uc|airflow|mlflow|notebooks)
             ;;
         *)
-            echo "Usage: lakehouse start [spark|kafka|airflow|unity-catalog|mlflow|all]"
+            echo "Usage: lakehouse start [storage|spark|kafka|airflow|unity-catalog|mlflow|notebooks|all]"
             exit 1
             ;;
     esac
@@ -751,6 +877,14 @@ cmd_stop() {
     header "STOPPING SERVICES"
 
     local service=$1
+
+    case $service in
+        storage)
+            echo -e "${YELLOW}Stopping storage (SeaweedFS + PostgreSQL)...${NC}"
+            overlay_set_compose_args storage || return 1
+            docker compose "${OVERLAY_COMPOSE_ARGS[@]}" down
+            ;;
+    esac
 
     case $service in
         spark|all)
@@ -793,10 +927,18 @@ cmd_stop() {
     esac
 
     case $service in
-        spark|kafka|all|unity-catalog|uc|airflow|mlflow)
+        notebooks)
+            echo -e "${YELLOW}Stopping notebooks (Jupyter)...${NC}"
+            overlay_set_compose_args notebooks || return 1
+            docker compose "${OVERLAY_COMPOSE_ARGS[@]}" down
+            ;;
+    esac
+
+    case $service in
+        storage|spark|kafka|all|unity-catalog|uc|airflow|mlflow|notebooks)
             ;;
         *)
-            echo "Usage: lakehouse stop [spark|kafka|airflow|unity-catalog|mlflow|all]"
+            echo "Usage: lakehouse stop [storage|spark|kafka|airflow|unity-catalog|mlflow|notebooks|all]"
             exit 1
             ;;
     esac
@@ -821,6 +963,8 @@ cmd_logs() {
             echo -e "${YELLOW}Logs for $(resolve_container_name spark-connect-41):${NC}"
             docker logs -f "$(resolve_container_name spark-connect-41)"
             ;;
+        postgres|postgresql) docker logs -f "$(get_storage_postgres_container)" ;;
+        seaweedfs|s3)     docker logs -f "$(get_storage_seaweedfs_container)" ;;
         kafka)            docker logs -f "$(resolve_container_name kafka)" ;;
         zookeeper)        docker logs -f "$(resolve_container_name zookeeper)" ;;
         unity-catalog|uc) docker logs -f "$(resolve_container_name unity-catalog)" ;;
@@ -829,7 +973,7 @@ cmd_logs() {
         airflow-scheduler|airflow-sched)  docker logs -f "$(resolve_container_name airflow-scheduler)" ;;
         airflow-triggerer)                docker logs -f "$(resolve_container_name airflow-triggerer)" ;;
         *)
-            echo "Usage: lakehouse logs [spark-master|spark-worker|spark-connect|kafka|zookeeper|unity-catalog|mlflow|airflow-webserver|airflow-scheduler|airflow-triggerer]"
+            echo "Usage: lakehouse logs [postgres|seaweedfs|spark-master|spark-worker|spark-connect|kafka|zookeeper|unity-catalog|mlflow|airflow-webserver|airflow-scheduler|airflow-triggerer]"
             exit 1
             ;;
     esac
@@ -852,16 +996,15 @@ cmd_test() {
     local failures=0
 
     echo -e "${YELLOW}1. Testing PostgreSQL connection...${NC}"
-    local pg_user="${POSTGRES_USER:-postgres}"
-    local pg_pass="${POSTGRES_PASSWORD:-}"
-    local pg_host="${POSTGRES_HOST:-localhost}"
-    pg_host="${pg_host/host.docker.internal/localhost}"  # Convert Docker hostname to localhost
-    if PGPASSWORD="$pg_pass" psql -h "$pg_host" -U "$pg_user" -d iceberg_catalog -c "SELECT 1;" >/dev/null 2>&1; then
+    # Use pg_psql (host client if present, else the version-matched dockerized
+    # client) so the check works against the Composed PostgreSQL without a host
+    # psql install (PR #13).
+    if pg_psql -d iceberg_catalog -c "SELECT 1;" >/dev/null 2>&1; then
         echo -e "   ${GREEN}✓${NC} PostgreSQL connected"
     else
         echo -e "   ${RED}✗${NC} PostgreSQL failed"
-        echo -e "   ${YELLOW}→ Check: systemctl status postgresql${NC}"
-        echo -e "   ${YELLOW}→ Verify POSTGRES_USER in .env matches your database user${NC}"
+        echo -e "   ${YELLOW}→ Check that storage is running: ./lakehouse start storage${NC}"
+        echo -e "   ${YELLOW}→ Verify POSTGRES_USER/PASSWORD in .env match the postgres service${NC}"
         ((failures++))
     fi
 
@@ -872,6 +1015,24 @@ cmd_test() {
         echo -e "   ${RED}✗${NC} SeaweedFS not responding on port 8333"
         echo -e "   ${YELLOW}→ Check if SeaweedFS is running${NC}"
         ((failures++))
+    fi
+
+    echo -e "\n${YELLOW}2b. Testing S3 conformance + presigned host-rewrite + layout (PR #13/Phase 2)...${NC}"
+    # These run on the host against localhost:8333 and need boto3 + requests
+    # (poetry deps). Skip with a hint if the runner/deps are unavailable rather
+    # than hard-failing the whole suite on a machine that hasn't run setup.
+    if poetry run python -c "import boto3, requests" >/dev/null 2>&1; then
+        for s3test in test-s3-conformance test-presigned-host-rewrite test-warehouse-layout; do
+            if poetry run python "scripts/connectivity/${s3test}.py"; then
+                echo -e "   ${GREEN}✓${NC} ${s3test} passed"
+            else
+                echo -e "   ${RED}✗${NC} ${s3test} failed"
+                ((failures++))
+            fi
+        done
+    else
+        echo -e "   ${YELLOW}-${NC} boto3/requests unavailable — skipping S3 conformance"
+        echo -e "   ${YELLOW}→ Run: ./lakehouse setup (or poetry install)${NC}"
     fi
 
     echo -e "\n${YELLOW}3. Testing Kafka...${NC}"
@@ -1200,7 +1361,7 @@ cmd_setup() {
 
     # Step 1.1: Check for GNU tools, when on MacOS
 	if [ -f /usr/bin/sw_vers ]
-	then	
+	then
 		echo -e "\n${YELLOW}1.1. Checking for GNU tools when on MacOS...${NC}"
 		if ! check_gnutools_on_macos; then
 			echo -e "\n${RED}Please install GNU tools on MacOS before continuing.${NC}"
@@ -1364,6 +1525,7 @@ cmd_setup() {
 # topology (T-1.5.1, plan 1.14.5). Reads the live server.properties if present,
 # else the image default (embedded H2). Prints "h2" or "postgresql:<db>".
 # Optional $1 overrides the properties path (used by unit tests).
+# shellcheck disable=SC2120  # $1 is an intentional optional override, not always passed
 detect_uc_backend() {
     local props="${1:-$PROJECT_ROOT/config/unity-catalog/server.properties}"
     if [ -f "$props" ]; then
@@ -1413,8 +1575,19 @@ reset_discover_volumes() {
 reset_volume_mode() {
     case "$1" in
         mlflow-data)           echo "metadata,all" ;;  # tracking state (kept by --keep-mlflow)
-        uc-data)               echo "metadata,all" ;;  # catalog state (if ever mounted)
+        uc-data)               echo "metadata,all" ;;  # catalog state (mounted PR #13/T-1.20b)
         uc-logs)               echo "never" ;;         # diagnostics — never destroyed
+        # Composed storage (PR #13/T-1.2): postgres-data holds EVERY database and
+        # seaweedfs-data the WHOLE object store. Their CONTENT is reset by the
+        # database drop-recreate and S3 bucket-clear steps (emitted separately in
+        # the plan) — the volumes themselves are NEVER removed. reset does not
+        # quiesce the storage services, so `docker volume rm` on these would fail
+        # ("in use") anyway; and a volume wipe is unnecessary since the content is
+        # already reset in place. Marked "never" so `--dry-run` doesn't claim a
+        # volume removal that never happens (dry-run honesty). Other volumes whose
+        # services ARE quiesced (uc-data, mlflow-data, spark-data) remain removable.
+        postgres-data)         echo "never" ;;
+        seaweedfs-data)        echo "never" ;;
         spark-data|spark-logs) echo "data,all" ;;      # job scratch + event logs
         *)                     echo "data,all" ;;      # default: data-plane scratch
     esac
@@ -1589,7 +1762,7 @@ pg_psql() {
         host="${host//localhost/host.docker.internal}"
         docker run --rm -i --add-host=host.docker.internal:host-gateway \
             -e PGPASSWORD="${POSTGRES_PASSWORD:-}" \
-            "${LAKEHOUSE_PG_CLIENT_IMAGE:-postgres:15-alpine}" \
+            "${LAKEHOUSE_PG_CLIENT_IMAGE:-postgres:16-alpine}" \
             psql -h "$host" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-postgres}" "$@"
     fi
 }
@@ -1608,7 +1781,7 @@ aws_s3() {
         ep="${ep//localhost/host.docker.internal}"
         docker run --rm --add-host=host.docker.internal:host-gateway \
             -e AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY:-}" -e AWS_SECRET_ACCESS_KEY="${S3_SECRET_KEY:-}" \
-            "${LAKEHOUSE_AWSCLI_IMAGE:-amazon/aws-cli:latest}" --endpoint-url "$ep" s3 "$@"
+            "${LAKEHOUSE_AWSCLI_IMAGE:-amazon/aws-cli:2.24.6}" --endpoint-url "$ep" s3 "$@"
     fi
 }
 
@@ -1683,6 +1856,10 @@ reset_running_services() {
     is_container_running "$(resolve_container_name unity-catalog)" && up="$up unity-catalog" || true
     is_container_running "$(resolve_container_name airflow-webserver)" && up="$up airflow" || true
     is_container_running "$(resolve_container_name mlflow)" && up="$up mlflow" || true
+    # Jupyter is a writer reset_quiesce stops (reset_stop_services ... notebooks), so
+    # it must be in the restart set too — else a running Jupyter is left stopped after
+    # a successful reset. cmd_start now has a `notebooks` arm to bring it back.
+    is_container_running "$(resolve_container_name jupyter)" && up="$up notebooks" || true
     echo "$up"
     return 0
 }
@@ -1697,6 +1874,7 @@ quiesce_containers_for() {
         unity-catalog) resolve_container_name unity-catalog ;;
         mlflow)        resolve_container_name mlflow ;;
         airflow)       echo "$(resolve_container_name airflow-webserver) $(resolve_container_name airflow-scheduler) $(resolve_container_name airflow-triggerer)" ;;
+        notebooks)     resolve_container_name jupyter ;;
     esac
 }
 
@@ -1726,9 +1904,9 @@ reset_stop_services() {
 # registrations are cleared via REST), so UC is not in the --data set.
 reset_quiesce() {
     case "$1" in
-        data)     reset_stop_services spark kafka mlflow airflow ;;
-        metadata) reset_stop_services unity-catalog mlflow airflow ;;
-        all)      reset_stop_services spark kafka unity-catalog mlflow airflow ;;
+        data)     reset_stop_services spark kafka mlflow airflow notebooks ;;
+        metadata) reset_stop_services unity-catalog mlflow airflow notebooks ;;
+        all)      reset_stop_services spark kafka unity-catalog mlflow airflow notebooks ;;
     esac
 }
 
@@ -2110,21 +2288,18 @@ backup_unquiesce_writers() {
 
 # pg_dump a single database to <dir>/<db>.dump — custom format WITH --create, so the
 # archive carries CREATE DATABASE ... OWNER and object GRANTs (I-29 ownership/grants).
-# Prefers a host pg_dump; falls back to a dockerized client with <dir> mounted.
+# Always uses a version-matched dockerized client (PR #13/T-1.20a): the Composed
+# PostgreSQL is a pinned major version (16), and a host pg_dump of an OLDER major
+# aborts with "server version mismatch". Pinning LAKEHOUSE_PG_CLIENT_IMAGE to the
+# server's major keeps backup/restore correct regardless of the host's pg tooling.
 pg_dump_db() {
     local db="$1" dir="$2" host="${POSTGRES_HOST:-localhost}"
-    if command -v pg_dump >/dev/null 2>&1; then
-        host="${host/host.docker.internal/localhost}"
-        PGPASSWORD="${POSTGRES_PASSWORD:-}" pg_dump -h "$host" -p "${POSTGRES_PORT:-5432}" \
-            -U "${POSTGRES_USER:-postgres}" -Fc --create -d "$db" -f "${dir}/${db}.dump"
-    else
-        host="${host//127.0.0.1/host.docker.internal}"; host="${host//localhost/host.docker.internal}"
-        docker run --rm --add-host=host.docker.internal:host-gateway \
-            -e PGPASSWORD="${POSTGRES_PASSWORD:-}" -v "${dir}:/backup" \
-            "${LAKEHOUSE_PG_CLIENT_IMAGE:-postgres:15-alpine}" \
-            pg_dump -h "$host" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-postgres}" \
-            -Fc --create -d "$db" -f "/backup/${db}.dump"
-    fi
+    host="${host//127.0.0.1/host.docker.internal}"; host="${host//localhost/host.docker.internal}"
+    docker run --rm --add-host=host.docker.internal:host-gateway \
+        -e PGPASSWORD="${POSTGRES_PASSWORD:-}" -v "${dir}:/backup" \
+        "${LAKEHOUSE_PG_CLIENT_IMAGE:-postgres:16-alpine}" \
+        pg_dump -h "$host" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-postgres}" \
+        -Fc --create -d "$db" -f "/backup/${db}.dump"
 }
 
 # Restore a single database from <dir>/<db>.dump. --create --clean --if-exists drops
@@ -2137,18 +2312,13 @@ pg_restore_db() {
     pg_psql -d postgres -c \
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${db}' AND pid <> pg_backend_pid();" \
         >/dev/null 2>&1 || true
-    if command -v pg_restore >/dev/null 2>&1; then
-        host="${host/host.docker.internal/localhost}"
-        PGPASSWORD="${POSTGRES_PASSWORD:-}" pg_restore -h "$host" -p "${POSTGRES_PORT:-5432}" \
-            -U "${POSTGRES_USER:-postgres}" --create --clean --if-exists -d postgres "${dir}/${db}.dump"
-    else
-        host="${host//127.0.0.1/host.docker.internal}"; host="${host//localhost/host.docker.internal}"
-        docker run --rm --add-host=host.docker.internal:host-gateway \
-            -e PGPASSWORD="${POSTGRES_PASSWORD:-}" -v "${dir}:/backup:ro" \
-            "${LAKEHOUSE_PG_CLIENT_IMAGE:-postgres:15-alpine}" \
-            pg_restore -h "$host" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-postgres}" \
-            --create --clean --if-exists -d postgres "/backup/${db}.dump"
-    fi
+    # Version-matched dockerized client (see pg_dump_db) — also what I-53 asserts.
+    host="${host//127.0.0.1/host.docker.internal}"; host="${host//localhost/host.docker.internal}"
+    docker run --rm --add-host=host.docker.internal:host-gateway \
+        -e PGPASSWORD="${POSTGRES_PASSWORD:-}" -v "${dir}:/backup:ro" \
+        "${LAKEHOUSE_PG_CLIENT_IMAGE:-postgres:16-alpine}" \
+        pg_restore -h "$host" -p "${POSTGRES_PORT:-5432}" -U "${POSTGRES_USER:-postgres}" \
+        --create --clean --if-exists -d postgres "/backup/${db}.dump"
 }
 
 # Sync between S3 and a LOCAL directory. Prefers host aws; else a dockerized aws-cli
@@ -2174,7 +2344,7 @@ s3_sync() {
         docker run --rm --add-host=host.docker.internal:host-gateway \
             -e AWS_ACCESS_KEY_ID="${S3_ACCESS_KEY:-}" -e AWS_SECRET_ACCESS_KEY="${S3_SECRET_KEY:-}" \
             -v "${localdir}:/data" \
-            "${LAKEHOUSE_AWSCLI_IMAGE:-amazon/aws-cli:latest}" \
+            "${LAKEHOUSE_AWSCLI_IMAGE:-amazon/aws-cli:2.24.6}" \
             --endpoint-url "$ep" s3 sync "$src" "$dst" "${extra[@]}"
     fi
 }
@@ -2267,8 +2437,14 @@ backup_take_snapshot() {
         uc_h2_backup "$dir" || return 1
     fi
 
-    # Named volumes (absent ones skipped).
+    # Named volumes (absent ones skipped). Skip "never"-mode volumes: postgres-data
+    # and seaweedfs-data hold the metastore/object store whose CONTENT is already
+    # captured authoritatively above (pg_dump + s3_sync), and their services are NOT
+    # quiesced (backup_writer_containers excludes them), so tarring their live data
+    # dir would yield a torn archive and drive a corrupting volume_restore. Same guard
+    # reset honors via reset_volume_mode (uc-logs is diagnostics, also skipped).
     for v in $(reset_discover_volumes); do
+        [ "$(reset_volume_mode "$v")" = "never" ] && continue
         vn=$(reset_effective_volume "$v")
         echo -e "${YELLOW}Archiving volume ${vn}...${NC}"
         volume_backup "$vn" "${dir}/volumes" || return 1
@@ -2424,7 +2600,21 @@ restore_apply() {
     aws_s3 mb "s3://${bucket}" >/dev/null 2>&1 || true  # ensure the bucket exists first
     s3_sync upload "$bucket" "${dir}/s3" || return 1
 
+    # Defense against a pre-fix manifest that still lists a "never"-mode storage
+    # volume: never rm -rf + tar-restore postgres-data/seaweedfs-data under the live
+    # store — their content is restored via pg_restore + s3_sync above. The manifest
+    # stores EFFECTIVE (project-prefixed) names, so compare against the effective names
+    # of the never-mode volumes rather than the base names reset_volume_mode keys on.
+    local never_vols="" nv
+    for nv in $(reset_discover_volumes); do
+        [ "$(reset_volume_mode "$nv")" = "never" ] && never_vols="${never_vols} $(reset_effective_volume "$nv")"
+    done
     for v in $vols; do
+        case " ${never_vols} " in
+            *" ${v} "*)
+                echo -e "${YELLOW}Skipping volume ${v} (restored via pg_restore + s3 sync)${NC}"
+                continue ;;
+        esac
         echo -e "${YELLOW}Restoring volume ${v}...${NC}"
         volume_restore "$v" "${dir}/volumes/${v}.tar" || return 1
     done
@@ -2783,8 +2973,9 @@ cmd_resolve() {
     # these values are the resolver's arithmetic, not live connection targets, and
     # runtime health probes deliberately use the fixed base ports.
     echo "ports_published_by_overlays=none"
-    # PostgreSQL and SeaweedFS are host-installed (outside Compose): fixed ports,
-    # never offset. Only containerized services can take a port offset.
+    # PostgreSQL and SeaweedFS are Composed (PR #13) but have NO test overlay, so
+    # they always publish fixed ports and are never offset. Only overlaid services
+    # take a port offset.
     echo "port.postgresql=5432"
     echo "port.seaweedfs=8333"
     echo "port.unity_catalog=$(resolve_port 8081)"
@@ -2819,11 +3010,11 @@ Commands:
   preflight           Run preflight checks before starting services
   migrate [--dry-run] Run database schema migrations
   status [--json]     Show all service status (human or JSON)
-  start [service]     Start service (spark|kafka|airflow|unity-catalog|mlflow|all)
-  stop [service]      Stop service (spark|kafka|airflow|unity-catalog|mlflow|all)
+  start [service]     Start service (storage|spark|kafka|airflow|unity-catalog|mlflow|notebooks|all)
+  stop [service]      Stop service (storage|spark|kafka|airflow|unity-catalog|mlflow|notebooks|all)
   restart [service]   Restart service
-  logs [service]      Tail logs (spark-master|spark-worker|kafka|zookeeper|
-                                  unity-catalog|mlflow|airflow-*)
+  logs [service]      Tail logs (postgres|seaweedfs|spark-master|spark-worker|kafka|
+                                  zookeeper|unity-catalog|mlflow|airflow-*)
   test                Run connectivity tests
   producer            Start Kafka event producer
   consumer            Start Spark streaming consumer
@@ -2838,12 +3029,13 @@ Commands:
   help                Show this help
 
 Services:
+  storage        SeaweedFS (S3, 8333) + PostgreSQL 16 (5432) — object store + metastore
   spark          Apache Spark 4.1 cluster (ports 7078, UI 8082)
   kafka          Kafka 3.6 + Zookeeper
   airflow        Apache Airflow 3.1 (UI 8085)
   unity-catalog  Unity Catalog OSS 0.4.x (REST API 8081)
   mlflow         MLflow 3.1 (tracking 5000, AI gateway 5001)
-  all            Spark + Kafka (start unity-catalog, airflow, mlflow individually)
+  all            Spark + Kafka (start storage, unity-catalog, airflow, mlflow individually)
 
 Catalog: Unity Catalog OSS only. No JDBC-catalog mode. UC provides:
   - Iceberg + Delta + Hudi via UniForm
