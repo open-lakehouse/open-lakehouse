@@ -86,7 +86,6 @@ class TestDirectories:
         dropped = (
             "streaming-kafka-to-iceberg",
             "delta-vs-iceberg",
-            "mlflow-tracking",
             "airflow-orchestration",
         )
         for d in dropped:

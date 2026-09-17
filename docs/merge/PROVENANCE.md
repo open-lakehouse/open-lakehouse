@@ -46,3 +46,36 @@ stale lifecycle CLI.
 CP-derived material ported in later checkpoints (the `terraform/spark-ecs` advertise-address
 pattern for T-1.3, `make cache-deps` antecedents, the MinIO→SeaweedFS substitution) must carry
 `Co-authored-by` trailers and be noted here as it lands.
+
+---
+
+## Phase 5 — Demos (`feat/merge-demos-docs`)
+
+**Branch base:** `feat/merge-demos-docs` is cut from the PR #13 trunk
+`feat/net-bridge-conversion` @ `4e25c6b` (per the fan strategy in `docs/merge/PR-fan-strategy.md`).
+
+Ported from the containerized-lakehouse platform notebooks
+(`~/workspace/containerized lakehouse platform/notebooks/`) and rewritten for the open-lakehouse
+stack: Spark Connect transport (`sc://localhost:15002`), SeaweedFS S3, the `lakehouse` bucket, and
+the pre-wired UC / Delta catalogs. Each demo follows the `demos/_template/` contract
+(script + README + `teardown.sh`) and runs top-to-bottom on the local Connect stack; its teardown
+clears its own artifacts to zero residue. The four Delta-backed demos are self-cleaning on re-run
+(they clear their S3 prefix and write Delta with `overwrite` at the start, via the shared
+`demos/_lib/` helpers). `mlflow-tracking` does not write a Delta table — it re-runs by restoring a
+soft-deleted experiment and registering a new model version, and its artifacts are removed by its
+teardown (not cleared at start).
+
+| Source notebook | Ported to | Key reworking vs the CP notebook |
+|---|---|---|
+| `01_Quick_Start` | `demos/quick-start/` | Connect; dropped the raw-parquet storage probe (S3A rename committer fails on SeaweedFS) — the governed Delta write proves storage instead. |
+| `02_Delta_Lake_Deep_Dive` | `demos/delta-deep-dive/` | Connect; Delta DML via SQL (no DeltaTable client); path-based `delta.\`s3a://…\``. |
+| `03_Unity_Catalog` | `demos/unity-catalog/` | Connect; external Delta registered by writing Delta with `overwrite` then `CREATE TABLE … USING delta LOCATION 's3://…'` (not CTAS; not `INSERT`; `s3://` not `s3a://`) — deterministic re-runs even over a lingering SeaweedFS dir; catalog list via UC REST (SHOW CATALOGS is lazy over Connect). |
+| `04_Analytics` | `demos/analytics/` | Connect; self-seeds a governed `unity.analytics_demo.sales`; matplotlib charts saved to PNG (headless `Agg`) instead of inline; matplotlib import guarded. |
+| `05_MLflow_Tracking` | `demos/mlflow-tracking/` | Data sourced/prepped in Spark Connect, trained with **scikit-learn** (not Spark ML): `mlflow.spark.log_model` saves via the S3A rename committer, which SeaweedFS rejects; `mlflow.sklearn.log_model` uploads via boto3 and works. Tracking + Model Registry + `champion` alias preserved. NOT a fold into `demos/mlflow/` (that is a separate conversational-analytics demo). |
+
+Ported demo code carries `Co-authored-by` trailers to the CP authors on commit.
+
+**Deferred (not in this PR):** `demos/unity-catalog-multi-engine/` (T-5.6) stays a placeholder —
+UC OSS 0.5.0's Iceberg REST endpoint cannot serve any table this stack can write (measured; see the
+session notes / memory), so a real multi-engine-via-REST demo is a separate follow-up. The
+`06/09/10` Delta Sharing notebooks (T-5.4) fold in after the Sharing PR lands.

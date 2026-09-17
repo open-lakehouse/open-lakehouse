@@ -26,18 +26,39 @@ Every `demos/<name>/README.md` has these five sections, in order:
 | [`sdp-imperative-to-declarative/`](sdp-imperative-to-declarative/) | **Built** | Connect + `spark-pipelines` | The same medallion pipeline written twice - imperative PySpark vs SDP - to show what SDP removes. |
 | [`sdp-streaming-batch-sql/`](sdp-streaming-batch-sql/) | **Built** | `spark-pipelines` | `CREATE STREAMING TABLE` vs `CREATE MATERIALIZED VIEW` - streaming vs batch semantics, in SQL. |
 | [`sdp-cli-lifecycle/`](sdp-cli-lifecycle/) | **Built** | `spark-pipelines` | The `spark-pipelines` developer loop as shell commands - `init`, `dry-run`, `run`. |
+| [`quick-start/`](quick-start/) | **Built** | Spark Connect | First governed Delta table via the three-level namespace, query, and one ACID update - the onboarding path. |
+| [`delta-deep-dive/`](delta-deep-dive/) | **Built** | Spark Connect | Delta ACID DML, time travel, schema evolution, and OPTIMIZE (SQL, path-based). |
+| [`unity-catalog/`](unity-catalog/) | **Built** | Spark Connect | UC three-level namespace, external Delta registration, metadata via SQL + REST, cross-schema join. |
+| [`analytics/`](analytics/) | **Built** | Spark Connect | Revenue / regional / window-function / daily-trend SQL on a governed table, with charts to PNG. |
+| [`mlflow-tracking/`](mlflow-tracking/) | **Built** | Spark Connect + MLflow | Experiment tracking, run comparison, Model Registry, and a `champion` alias (sklearn models). |
 | [`unity-catalog-multi-engine/`](unity-catalog-multi-engine/) | Placeholder | Spark Connect + DuckDB | One catalog, multiple engines reading the same table. |
 | [`realtime-mode/`](realtime-mode/) | **Built** | `spark-submit` (Structured Streaming) | Kafka -> Kafka stateless guardrail in Real-Time Mode (`trigger(realTime=...)`), dynamic topic routing to `-allowed` / `-quarantine`. |
 | [`local-mode-spark/`](local-mode-spark/) | **Not yet implemented** | Local (no cluster) | In-process SparkSession for offline / laptop-only demos. Backs the `--spark-local` flag. |
 
-The four SDP demos and `realtime-mode` are working demos with full READMEs.
-`unity-catalog-multi-engine` and `local-mode-spark` are placeholders -
+The four SDP demos, `realtime-mode`, and the five analytical demos (`quick-start`,
+`delta-deep-dive`, `unity-catalog`, `analytics`, `mlflow-tracking`) are working demos with full
+READMEs. `unity-catalog-multi-engine` and `local-mode-spark` are placeholders -
 content is added demo-by-demo, never fabricated. To scaffold:
 
 ```bash
 cp -r demos/_template demos/<name>
 # then edit demos/<name>/README.md
 ```
+
+### Shared helpers (`demos/_lib/`)
+
+The analytical demos share small helpers so the S3/Delta plumbing lives in one place:
+
+- `demos/_lib/delta_helpers.py` — `clear_prefix()` and `recreate_delta_table()` (write Delta with
+  `overwrite`, then register in UC — deterministic re-runs even over a lingering SeaweedFS
+  directory). Used by the four Delta demos (`quick-start`, `delta-deep-dive`, `unity-catalog`,
+  `analytics`). Each script puts **`demos/_lib`** on `sys.path` (not `demos/`, which would shadow
+  the `mlflow` PyPI package with the `demos/mlflow` app dir) and `import delta_helpers` directly.
+- `demos/_lib/s3_cleanup.sh` — `awscli()` (host aws or a pinned dockerized fallback) and
+  `clear_s3_prefix()`, sourced by every demo's `teardown.sh` (all five).
+
+The demo *narrative* still lives in each demo's own script/README (a reader follows one demo end
+to end from its README); only the repeated object-store plumbing is shared.
 
 ## How an LLM uses this
 
