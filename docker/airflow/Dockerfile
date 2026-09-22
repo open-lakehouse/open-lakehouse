@@ -1,9 +1,9 @@
-# Airflow 3.1.6 with Python 3.12
-FROM apache/airflow:3.1.6-python3.12
+# Airflow 3.3.2 with Python 3.12
+FROM apache/airflow:3.3.2-python3.12
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG PIP_TRUSTED_HOST=
-ARG SPARK_DIST_URL=https://archive.apache.org/dist/spark/spark-4.1.0/spark-4.1.0-bin-hadoop3.tgz
+ARG SPARK_DIST_URL=https://archive.apache.org/dist/spark/spark-4.1.3/spark-4.1.3-bin-hadoop3.tgz
 
 USER root
 
@@ -20,7 +20,7 @@ ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Download and install Spark (for spark-submit)
-ENV SPARK_VERSION=4.1.0
+ENV SPARK_VERSION=4.1.3
 ENV SPARK_HOME=/opt/spark
 RUN curl -fsSL "$SPARK_DIST_URL" \
     | tar -xz -C /opt/ \
@@ -40,7 +40,7 @@ RUN set --; \
       apache-airflow-providers-apache-kafka==1.8.0 \
       apache-airflow-providers-docker==3.14.0 \
       apache-airflow-providers-http==5.6.3 \
-      pyspark==4.1.0
+      pyspark==4.1.3
 
 # Create directories
 RUN mkdir -p /opt/airflow/dags /opt/airflow/logs /opt/airflow/config

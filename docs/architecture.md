@@ -172,12 +172,12 @@ A `--spark-local` flag exists on the CLI as a forward-compat stub for an eventua
 
 | Component | Version | Why pinned |
 |-----------|---------|------------|
-| Spark | 4.1.0 | Scala 2.13, Java 21 |
+| Spark | 4.1.3 | Scala 2.13, Java 21 |
 | Iceberg | 1.10.0 | `iceberg-spark-runtime-4.0_2.13-1.10.0.jar` covers Spark 4.0+ |
 | Delta | 4.3.1 | Compatible with Spark 4.1 |
 | Hadoop | 3.4.1 | Bundled in Spark image |
 | AWS SDK v2 | 2.24.6 | Exact match for Hadoop 3.4.1 |
-| Airflow | 3.1.6 | Breaking changes from 2.x — see airflow-3 skill |
+| Airflow | 3.3.2 | Breaking changes from 2.x — see airflow-3 skill |
 | Unity Catalog OSS | 0.5.0 | Catalog-managed Delta, Iceberg REST (read-only) |
 | MLflow | 3.1 | AI Gateway needs ≥ 3.0 |
 
