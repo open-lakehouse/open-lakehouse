@@ -18,7 +18,7 @@
 
 services:
   spark-master-41:
-    image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+    image: apache/spark:4.1.3-scala2.13-java21-python3-r-ubuntu
     container_name: spark-master-41
     env_file:
       - path: .env
@@ -52,7 +52,7 @@ services:
       - lakehouse-network
 
   spark-worker-41:
-    image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+    image: apache/spark:4.1.3-scala2.13-java21-python3-r-ubuntu
     container_name: spark-worker-41
     env_file:
       - path: .env
@@ -92,7 +92,7 @@ services:
   # this image, so we skip the ivy/Maven resolve at cold start (offline-friendly;
   # Phase 6 air-gapped goal).
   spark-connect-41:
-    image: apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+    image: apache/spark:4.1.3-scala2.13-java21-python3-r-ubuntu
     container_name: spark-connect-41
     env_file:
       - path: .env
