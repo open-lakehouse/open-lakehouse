@@ -124,7 +124,7 @@ jobs:
       # jars/lockfiles present) — an inventory to diff release-over-release and
       # feed to vuln scanners. docs/testing.md — supply chain.
       - name: Generate SBOM (SPDX-JSON)
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
           path: .
           format: spdx-json
@@ -132,7 +132,7 @@ jobs:
           artifact-name: sbom.spdx.json
 
       - name: Vulnerability scan (informational)
-        uses: anchore/scan-action@v6
+        uses: anchore/scan-action@1638637db639e0ade3258b51db49a9a137574c3e # v6
         with:
           sbom: sbom.spdx.json
           fail-build: false

@@ -86,16 +86,18 @@ jobs:
           sed -i "s|your_access_key|lakehouse_s3|; s|your_secret_key|lakehouse_s3_secret|" \
             config/spark/spark-defaults.conf
 
-      - name: Setup (download the pinned/good JAR set)
+      - name: Start storage FIRST (PostgreSQL + SeaweedFS)
+        # setup runs setup_postgres (needs PG up) — storage must precede it.
+        run: ./lakehouse start storage
+
+      - name: Setup (download the pinned/good JAR set, init PG DBs)
         run: ./lakehouse setup
 
       - name: Swap Delta onto the live classpath
         run: bash scripts/tools/swap-delta-version.sh "${{ matrix.delta }}"
 
-      - name: Bring up storage + Spark (reads the swapped live conf)
-        run: |
-          ./lakehouse start storage
-          ./lakehouse start all
+      - name: Bring up Spark (reads the swapped live conf — storage already up)
+        run: ./lakehouse start all
 
       - name: Readiness gate (spark-master must be up — a down master is a failure)
         run: |

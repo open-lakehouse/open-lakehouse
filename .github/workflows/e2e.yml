@@ -97,7 +97,13 @@ jobs:
           sed -i "s|your_access_key|lakehouse_s3|; s|your_secret_key|lakehouse_s3_secret|" \
             config/spark/spark-defaults.conf
 
-      - name: Setup (validate env, deps, download pinned JARs)
+      - name: Start storage FIRST (PostgreSQL + SeaweedFS)
+        # `./lakehouse setup` runs setup_postgres whenever psql + POSTGRES_USER
+        # are present (both true on the runner), which needs PostgreSQL reachable.
+        # So storage must be up BEFORE setup, not after (lakehouse:1536).
+        run: ./lakehouse start storage
+
+      - name: Setup (validate env, deps, download pinned JARs, init PG DBs)
         run: ./lakehouse setup
 
       - name: Verify JAR integrity (size + sha256 against jars.sha256)
@@ -108,9 +114,8 @@ jobs:
         # fails (until then it warns, and size still gates).
         run: ./scripts/tools/download-jars.sh --verify-only
 
-      - name: Start stack (storage FIRST, then all, UC, MLflow)
+      - name: Start stack (Spark + Kafka, then UC, MLflow — storage already up)
         run: |
-          ./lakehouse start storage
           ./lakehouse start all
           ./lakehouse start unity-catalog
           ./lakehouse start mlflow
