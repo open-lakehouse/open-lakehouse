@@ -1,8 +1,10 @@
 # open-lakehouse
 
-> A composable OSS lakehouse demo platform — Spark 4.1 (Connect-first), Kafka, Airflow, Iceberg, Delta, Unity Catalog OSS, MLflow. Runs locally on Docker. Deploys to AWS. Designed to be set up and torn down by an AI agent.
+> An open reference architecture for the lakehouse — Spark 4.1 (Connect-first), Kafka, Airflow, Iceberg, Delta, Unity Catalog OSS, MLflow, every layer open source. Runs locally on Docker, deploys to AWS. Made and maintained by Databricks; designed to be set up and torn down by an AI agent.
 
-This repo is the demo-focused sibling of the upstream [lakehouse-stack](https://github.com/lisancao/lakehouse-stack). It strips the platform down to a fixed set of OSS services, ships clean AI-skill scaffolding, and uses Unity Catalog OSS as its only catalog. Demos live under [`demos/`](demos/) — ten are built out today, each following a fixed README contract so an LLM (or a human) can run any demo by reading its README.
+The lakehouse is **open by design** — open table formats (Delta Lake, Apache Iceberg), an open catalog (Unity Catalog OSS), and open compute (Apache Spark), with no proprietary storage layer and no vendor lock-in. **open-lakehouse** is a reference architecture that shows those pieces composing into one working stack you can stand up on your own infrastructure, run end-to-end, and tear down cleanly.
+
+It's made and maintained by **Databricks**, which originated and open-sourced much of the stack — Apache Spark, Delta Lake, Unity Catalog, and MLflow are all Databricks-authored OSS projects. This repo is where those projects are shown running together as a single coherent platform: Unity Catalog OSS as the only catalog, Connect-first transport, and AI-skill scaffolding clean enough that an agent (or a human) can operate the whole thing from the READMEs. Demos live under [`demos/`](demos/) — ten are built out today, each following a fixed README contract so any demo can be run just by reading its README.
 
 ## Stack
 
@@ -167,9 +169,11 @@ Design principle: CLAUDE.md is a map, skills are the territory, agents are worke
 - **Pre-commit hooks** enforce: `detect-secrets`, `detect-private-key`, Bandit (Python), ShellCheck (shell). Install with `pre-commit install`.
 - See [SECURITY.md](SECURITY.md) for full credential-handling rules.
 
-## Why this repo exists
+## Why this exists
 
-The upstream `lakehouse-stack` repo supports multiple Spark versions, two catalog paths, benchmarks, and several AI-skill iterations. It's reference architecture. **This repo is a demo platform**: a stripped, opinionated subset with strict service surface, Connect-first transport, clean AI scaffolding, and explicit teardown. It's what we run when we want to show a customer something end-to-end without exposing every degree of freedom.
+The lakehouse works because its layers are open and swappable — but "open" is easy to claim and harder to show. Most lakehouse material is either a vendor demo you can't self-host or a pile of disconnected OSS projects you have to wire together yourself. This repo is the missing middle: an opinionated, end-to-end reference architecture where **every layer is open source**, the whole thing runs on your own machine or cloud account, and the service surface is small enough to reason about — a single catalog (Unity Catalog OSS), Connect-first transport, explicit teardown, and AI scaffolding that lets an agent stand it up and take it down without hand-holding.
+
+Databricks builds and maintains it as the canonical way to see the open lakehouse working as one system, using the same OSS projects — Spark, Delta Lake, Unity Catalog, MLflow — that Databricks originated and continues to develop in the open.
 
 ## Contributing
 
