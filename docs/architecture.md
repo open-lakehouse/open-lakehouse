@@ -44,7 +44,7 @@ System design for the open-lakehouse demo platform. Seven services, one catalog,
 │   STORAGE                                            │
 │                                                      │
 │   SeaweedFS (S3 API)  :8333                          │
-│   └─ s3://warehouse/                                 │
+│   └─ s3://lakehouse/warehouse/                       │
 │       ├─ bronze/                                     │
 │       ├─ silver/                                     │
 │       └─ gold/                                       │
@@ -114,7 +114,7 @@ Kafka topic ──readStream──▶  Spark SS  ──writeStream──▶  ice
                                                           iceberg.gold.<table>
 ```
 
-Checkpoints live under `s3://warehouse/_checkpoints/<dataset>/` so streams resume cleanly after restart.
+Checkpoints live under `s3://lakehouse/warehouse/_checkpoints/<dataset>/` so streams resume cleanly after restart.
 
 ## Orchestration: Airflow 3.1
 
@@ -128,13 +128,13 @@ DAGs live in `dags/`. The compose file mounts that directory into all Airflow co
 
 ## Experiment tracking: MLflow 3.1
 
-Tracking server on `:5000`, AI Gateway on `:5001`. Backend store is PostgreSQL (`mlflow` database). Artifact store is SeaweedFS (`s3://mlflow/`). The AI Gateway routes LLM calls to Anthropic or local Ollama via `config/mlflow/gateway-config.yml`.
+Tracking server on `:5000`, AI Gateway on `:5001`. Backend store is PostgreSQL (`mlflow` database). Artifact store is SeaweedFS (`s3://lakehouse/mlflow-artifacts/`). The AI Gateway routes LLM calls to Anthropic or local Ollama via `config/mlflow/gateway-config.yml`.
 
 ## Storage: SeaweedFS
 
 S3-compatible object storage running locally. Endpoint: `localhost:8333`. Same code that writes to SeaweedFS reads from real S3 in AWS deployments — just change the endpoint and credentials.
 
-Path layout under `s3://warehouse/`:
+Path layout under `s3://lakehouse/warehouse/`:
 
 ```
 warehouse/
@@ -159,6 +159,8 @@ warehouse/
 | Airflow | 8085 | 8085 |
 | MLflow Tracking | 5000 | 5000 |
 | MLflow AI Gateway | 5001 | — |
+| Delta Sharing | 8443 | HTTPS (opt-in) |
+| Dashboard | 3000 | 3000 |
 
 ## Transport: Connect-first
 
