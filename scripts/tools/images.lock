@@ -1,0 +1,14 @@
+# image digest lock for open-lakehouse (docs/testing.md — supply chain).
+#
+# Format: "<repo:tag> <sha256:...>"
+# SSOT for which images belong here = the `image:` lines in docker-compose-*.yml
+# plus the `FROM` lines in every Dockerfile (locally-built lakehouse-*/
+# open-lakehouse-* images and build-stage aliases excluded).
+#
+# UNPOPULATED until generated on a networked machine with docker/crane/skopeo:
+#     ./scripts/tools/pin-images.sh --lock
+# then commit the diff. Until then `pin-images.sh --check` WARNS (non-fatal).
+#
+# Pinning the digest here records the reproducible bytes; to ENFORCE it at pull
+# time, rewrite the compose `image:` / Dockerfile `FROM` to repo@<digest>. Once
+# populated, flip CI to `--strict` (see docs/testing.md — supply chain).

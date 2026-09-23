@@ -1,0 +1,11 @@
+# sha256 lock for open-lakehouse pinned JARs (docs/testing.md — supply chain).
+#
+# Format: "<sha256>  <filename>" (sha256sum / `shasum -a 256` output).
+# download-jars.sh verifies every jar against this on download and in
+# --verify-only; a MISMATCH is always fatal.
+#
+# This lock is UNPOPULATED until generated on a networked machine:
+#     ./scripts/tools/download-jars.sh --lock
+# then commit the diff. Until then, checksum verification WARNS (non-fatal) and
+# only the size check gates. Once populated, flip enforcement on by adding
+# --require-checksums to the T0 gate (see docs/testing.md).

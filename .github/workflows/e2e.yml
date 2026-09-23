@@ -1,0 +1,206 @@
+name: E2E
+
+# End-to-end stack tests (Tier 3 in docs/testing.md). These bring the FULL
+# stack up via ./lakehouse and run tests/integration/ against the real pinned
+# classpath — the guarantee the lightweight ci.yml (lint/unit/security) cannot
+# make. They are heavier than a per-PR check, so they run:
+#   - on any PR that changes a version pin or the stack definition (the exact
+#     moment "does it still work together" needs an answer),
+#   - nightly against main (so a moved image tag or yanked jar surfaces in a day),
+#   - on demand (workflow_dispatch).
+#
+# NOTE: authored against canonical's ./lakehouse CLI + compose files and the
+# lakehouse-at-home e2e-pipeline shape, but not yet shaken out on a live runner
+# in this environment (Docker was unavailable at authoring time). Treat the
+# first scheduled run as the validation pass.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/tools/download-jars.sh'
+      - 'config/spark/spark-defaults.conf.example'
+      - 'docker-compose-*.yml'
+      - 'CLAUDE.md'
+      - 'pyproject.toml'
+      - 'tests/integration/**'
+      - '.github/workflows/e2e.yml'
+  schedule:
+    - cron: '0 7 * * *'   # 07:00 UTC nightly
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # T0 fast-fail: never spend runner minutes bringing a stack up if the pins are
+  # already inconsistent on paper.
+  preflight:
+    name: Preflight (T0 static)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Version-consistency gate
+        run: bash scripts/tools/verify-versions.sh --tracked-only
+      - name: Validate compose files
+        run: |
+          for f in docker-compose-*.yml; do
+            docker compose -f "$f" config -q && echo "✓ $f"
+          done
+
+  stack-e2e:
+    name: Full-stack E2E (T3)
+    runs-on: ubuntu-latest
+    needs: preflight
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - run: pipx install poetry==2.1.0
+      - run: poetry install --with dev,test
+
+      - name: Cache JAR downloads
+        uses: actions/cache@v4
+        with:
+          # download-jars.sh fetches into jars/ (mounted to /opt/spark/jars-extra
+          # inside the containers). Key on both the download script and the lock,
+          # so a checksum change busts the cache.
+          path: jars/
+          key: jars-${{ hashFiles('scripts/tools/download-jars.sh', 'scripts/tools/jars.sha256') }}
+          restore-keys: jars-
+
+      - name: Prepare env (.env + configs from examples)
+        run: |
+          cp .env.example .env
+          # Test-only credentials; the stack is torn down at job end.
+          {
+            echo "POSTGRES_USER=lakehouse"
+            echo "POSTGRES_PASSWORD=lakehouse_test_pw"
+            echo "S3_BUCKET=lakehouse"
+            echo "S3_WAREHOUSE=s3a://lakehouse/warehouse"
+          } >> .env
+          cp config/spark/spark-defaults.conf.example config/spark/spark-defaults.conf
+
+      - name: Setup (validate env, deps, download pinned JARs)
+        run: ./lakehouse setup
+
+      - name: Verify JAR integrity (size + sha256 against jars.sha256)
+        # Supply-chain gate (docs/testing.md). A jar with a lock entry that does
+        # not match is fatal here even though setup already ran; this surfaces the
+        # checksum result as its own step. Once jars.sha256 is populated on a
+        # networked machine, add --strict-checksums so a MISSING lock entry also
+        # fails (until then it warns, and size still gates).
+        run: ./scripts/tools/download-jars.sh --verify-only
+
+      - name: Start stack (storage FIRST, then all, UC, MLflow)
+        run: |
+          ./lakehouse start storage
+          ./lakehouse start all
+          ./lakehouse start unity-catalog
+          ./lakehouse start mlflow
+
+      - name: Readiness gate — stack MUST be up (a down stack is a failure, not a skip)
+        # docs/testing.md principle #2: on the gated path a skipped integration
+        # test is red. We assert the containers the version gates require are
+        # actually running and Connect is listening, BEFORE pytest — so the
+        # gates cannot silently self-skip and report green.
+        run: |
+          set -e
+          ./lakehouse status --json | tee status.json
+          python3 - <<'PY'
+          import json, sys
+          s = json.load(open("status.json"))
+          spark = s.get("spark", {})
+          svc = s.get("services", {})
+          # The services the integration gates actually exercise must ALL be up,
+          # so a gate cannot self-skip and report green. connect_grpc_listening is
+          # the canonical Spark readiness signal (lakehouse:522).
+          required = {
+              "spark.master": spark.get("master"),
+              "spark.connect_grpc_listening": spark.get("connect_grpc_listening"),
+              "services.postgresql": svc.get("postgresql"),
+              "services.seaweedfs": svc.get("seaweedfs"),
+              "services.unity_catalog": svc.get("unity_catalog"),
+              "services.mlflow": svc.get("mlflow"),
+          }
+          down = [k for k, v in required.items() if not v]
+          if down:
+              print(f"::error::stack not ready — down: {down}\nfull status: {json.dumps(s)}")
+              sys.exit(1)
+          print("all required services up — stack ready.")
+          PY
+          for c in spark-master-41 spark-connect-41; do
+            docker ps --format '{{.Names}}' | grep -qx "$c" \
+              || { echo "::error::required container $c not running"; exit 1; }
+          done
+
+      - name: Integration suite (T3) — the real classpath, no --ignore
+        # On a pin-file PR run the fast tier; nightly runs everything (slow
+        # included) so a slow-path regression surfaces within a day.
+        run: |
+          MARK="not slow"
+          [ "${{ github.event_name }}" = "schedule" ] && MARK=""
+          if [ -n "$MARK" ]; then
+            poetry run pytest tests/integration/ --junitxml=e2e-report.xml -m "$MARK" -v
+          else
+            poetry run pytest tests/integration/ --junitxml=e2e-report.xml -v
+          fi
+
+      - name: Fail on skipped version gates
+        if: always()
+        # Even with the readiness gate, assert the ABI/version tests did not skip.
+        # A skip on this path means the guarantee was not exercised → red.
+        run: |
+          python3 - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          # The cross-layer contracts that MUST run when the stack is up: the Delta
+          # ABI gates (I-02) and the UC governance / multi-engine golden-rule gates
+          # (I-47 rejects Iceberg-format writes + no Iceberg write endpoint; I-44/I-08
+          # catalog→schema→Delta round-trip). A skip here means the guarantee was not
+          # exercised → red.
+          GATES = {"test_i02_delta_write_read_timetravel",
+                   "test_i02_delta_431_pinned_in_config",
+                   "test_i44_i08_catalog_schema_delta_roundtrip",
+                   "test_i47_uc_rejects_iceberg_format",
+                   "test_i47_iceberg_rest_has_no_table_write_endpoint"}
+          try:
+              root = ET.parse("e2e-report.xml").getroot()
+          except FileNotFoundError:
+              print("::error::no e2e-report.xml — the suite did not run"); sys.exit(1)
+          skipped = [tc.get("name") for tc in root.iter("testcase")
+                     if tc.get("name") in GATES
+                     and any(c.tag == "skipped" for c in tc)]
+          if skipped:
+              print(f"::error::version gate(s) skipped on gated path: {skipped}")
+              sys.exit(1)
+          print("version gates ran (not skipped).")
+          PY
+
+      - name: Connectivity smoke (./lakehouse test)
+        run: ./lakehouse test || true   # informational; the suite above is the gate
+
+      - name: Upload E2E report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: e2e-report.xml
+
+      - name: Teardown (safe stop — never down -v)
+        if: always()
+        # Golden rule #4: never `docker compose down -v`. stop preserves volumes;
+        # the runner is ephemeral so data is discarded with the VM anyway.
+        run: |
+          ./lakehouse stop all || true
+          ./lakehouse stop storage || true

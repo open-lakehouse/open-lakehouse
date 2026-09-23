@@ -1,0 +1,101 @@
+name: Deploy parity (T5)
+
+# Deployment parity (Tier 5 in docs/testing.md). The terraform/ (AWS) and
+# terraform-databricks/ paths are how a company actually runs this in
+# production, so they are held to the same "green means proven" bar as the local
+# stack — not left to rot until a release. This is the STATIC parity gate:
+# fmt + init(-backend=false) + validate for every Terraform root, plus the
+# golden-rule guards (UC-only, no JDBC catalog) applied to the IaC. A smoke
+# `terraform apply` against real cloud accounts is a separate release-only job
+# (it needs credentials and a teardown budget) and is intentionally not here.
+#
+# No cloud credentials required: `validate` type-checks config and resolves
+# providers without contacting a backend or provider API.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - 'terraform-databricks/**'
+      - 'terraform-notebooks/**'
+      - '.github/workflows/deploy-parity.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  terraform-validate:
+    name: Terraform fmt + validate (all roots)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Formatting (fmt -check, all files)
+        run: terraform fmt -check -recursive
+
+      # A Terraform "root" is any directory that declares required_providers /
+      # required_version (i.e. a real config root, not a shared-var fragment).
+      # Discover them so a new stack is picked up automatically.
+      - name: Discover and validate every Terraform root
+        run: |
+          set -e
+          roots="$(grep -rlE 'required_providers|required_version' --include='*.tf' . \
+                   | xargs -n1 dirname | sort -u)"
+          if [ -z "$roots" ]; then
+            echo "::error::no Terraform roots found — expected terraform/ + terraform-databricks/"
+            exit 1
+          fi
+          echo "Terraform roots:"; echo "$roots" | sed 's/^/  /'
+          rc=0
+          for d in $roots; do
+            echo "== validate $d =="
+            ( cd "$d" && terraform init -backend=false -input=false -no-color \
+                && terraform validate -no-color ) || rc=1
+          done
+          exit $rc
+
+  golden-rules-iac:
+    name: Golden-rule guards (IaC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: No JDBC catalog / PostgreSQL catalog path in IaC (UC-only)
+        # Golden rule #1: the catalog is Unity Catalog OSS only. A JDBC-catalog
+        # path leaking into a deployment template is the exact production-affecting
+        # regression this guard prevents.
+        run: |
+          set -e
+          hits="$(grep -rniE \
+            'catalog\.[a-z0-9_]+\.type[[:space:]]*=[[:space:]]*jdbc|jdbc\.(user|password)|iceberg\.type.*jdbc' \
+            terraform terraform-databricks terraform-notebooks 2>/dev/null || true)"
+          if [ -n "$hits" ]; then
+            echo "::error::JDBC-catalog path found in deployment templates (golden rule #1 — UC-only):"
+            echo "$hits"
+            exit 1
+          fi
+          echo "✓ no JDBC-catalog path in IaC — Unity Catalog OSS only."
+
+      - name: Spark deploy templates pin 4.1 (no other major)
+        # Golden rule #2: Spark is 4.1 only. Catch a deploy image drifting off the
+        # supported line (a Spark 3.x / 4.0 image in an ECS task def).
+        run: |
+          set -e
+          bad="$(grep -rniE 'apache/spark:[0-9]+\.[0-9]+' terraform 2>/dev/null \
+                 | grep -vE 'apache/spark:4\.1' || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::non-4.1 Spark image in deploy templates (golden rule #2):"
+            echo "$bad"
+            exit 1
+          fi
+          echo "✓ deploy templates reference Spark 4.1 only."

@@ -50,6 +50,13 @@ jobs:
       - name: Bash syntax check
         run: bash -n lakehouse
 
+      - name: Version-consistency gate (T0)
+        # Pins are tested claims, not comments (docs/testing.md). Fails the build
+        # if the core jar versions in download-jars.sh / spark-defaults.conf.example
+        # / CLAUDE.md disagree, or a forbidden version / JDBC-catalog path leaked
+        # into shipped config. No Docker, no network.
+        run: bash scripts/tools/verify-versions.sh --tracked-only
+
       - name: Validate compose files
         run: |
           for f in docker-compose-*.yml; do
@@ -105,3 +112,40 @@ jobs:
 
       - name: pytest -m security
         run: poetry run pytest -m security -v
+
+  supply-chain:
+    name: SBOM & supply-chain
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v5
+
+      # SBOM of the whole repo (Python deps via poetry.lock, plus any pinned
+      # jars/lockfiles present) — an inventory to diff release-over-release and
+      # feed to vuln scanners. docs/testing.md — supply chain.
+      - name: Generate SBOM (SPDX-JSON)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+          artifact-name: sbom.spdx.json
+
+      - name: Vulnerability scan (informational)
+        uses: anchore/scan-action@v6
+        with:
+          sbom: sbom.spdx.json
+          fail-build: false
+          severity-cutoff: high
+          output-format: table
+
+      # Warn (not fail) until scripts/tools/images.lock is generated on a
+      # networked machine. Flip to --strict here once it is populated.
+      - name: Container image digest-lock coverage
+        run: bash scripts/tools/pin-images.sh --check
+
+      # Same story for the jar sha256 lock: coverage is warn-only until
+      # jars.sha256 is populated (./scripts/tools/download-jars.sh --lock), then
+      # add --require-checksums to enforce.
+      - name: JAR sha256 lock coverage
+        run: bash scripts/tools/verify-versions.sh --tracked-only
