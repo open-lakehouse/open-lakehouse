@@ -2,7 +2,7 @@
 
 > A composable OSS lakehouse demo platform — Spark 4.1 (Connect-first), Kafka, Airflow, Iceberg, Delta, Unity Catalog OSS, MLflow. Runs locally on Docker. Deploys to AWS. Designed to be set up and torn down by an AI agent.
 
-This repo is the demo-focused sibling of the upstream [lakehouse-stack](https://github.com/lisancao/lakehouse-stack). It strips the platform down to seven OSS services, ships clean AI-skill scaffolding, and uses Unity Catalog OSS as its only catalog. Demos live under `demos/` and start empty — each one follows a fixed README contract so an LLM can run any demo by reading its README.
+This repo is the demo-focused sibling of the upstream [lakehouse-stack](https://github.com/lisancao/lakehouse-stack). It strips the platform down to a fixed set of OSS services, ships clean AI-skill scaffolding, and uses Unity Catalog OSS as its only catalog. Demos live under [`demos/`](demos/) — ten are built out today, each following a fixed README contract so an LLM (or a human) can run any demo by reading its README.
 
 ## Stack
 
@@ -17,6 +17,8 @@ This repo is the demo-focused sibling of the upstream [lakehouse-stack](https://
 | Experiment tracking | MLflow | 3.14 |
 | Object store | SeaweedFS (S3-compatible) | — |
 | Metastore | PostgreSQL | 16 |
+| Data sharing | Delta Sharing server (OpenSharing + proxy, port 8443) | 1.3.10 |
+| Dashboard | Read-only Next.js viewer (port 3000) | — |
 
 All components are Apache-2.0 or Apache-compatible permissive licenses. See [NOTICE](NOTICE).
 
@@ -35,7 +37,7 @@ Four layers, one catalog, one Spark version:
 - **Compute** is Spark 4.1 in Connect-first mode (`spark-connect-41`, master, worker).
 - **Unity Catalog OSS** (`:8081`) is the *only* catalog — Delta on the write path, Iceberg REST as a read-only multi-engine surface. Its metadata lives in **PostgreSQL** (`:5432`).
 - **Storage** is **SeaweedFS** (S3-compatible, `:8333`) under `s3://warehouse/`.
-- Alongside: **Kafka** (`:9092`) feeds the streaming path, and **Airflow** (`:8085`), **MLflow** (`:5000`/`:5001`) and a read-only **dashboard** handle orchestration, tracking, and viewing.
+- Alongside: **Kafka** (`:9092`) feeds the streaming path, and **Airflow** (`:8085`), **MLflow** (`:5000`/`:5001`), a read-only **dashboard** (`:3000`) and an opt-in **Delta Sharing** server (`:8443`) handle orchestration, tracking, viewing, and external sharing.
 
 Full detail — every port, the config keys, and the write-path/read-path split — is in [`docs/architecture.md`](docs/architecture.md).
 
@@ -88,20 +90,30 @@ Spark Declarative Pipelines (SDP) **requires** Connect machinery — `pyspark.pi
 
 ```bash
 ./lakehouse stop all       # safe stop, preserves named volumes
+./lakehouse reset          # start fresh: surgically resets the databases + object store (confirms; --dry-run)
 ```
 
-Full teardown including data: see [`.claude/skills/lakehouse-lifecycle/stop.md`](.claude/skills/lakehouse-lifecycle/stop.md).
+`stop` preserves every named volume (PostgreSQL, SeaweedFS, UC, MLflow, Spark). `reset` is the "start clean" path — it resets the databases and object store without a blunt `docker compose down -v`. Full teardown including data: see [`.claude/skills/lakehouse-lifecycle/stop.md`](.claude/skills/lakehouse-lifecycle/stop.md).
+
+## Sharing and the dashboard
+
+Two optional surfaces sit alongside the core stack:
+
+- **Delta Sharing** — an opt-in [Delta Sharing](https://delta.io/sharing/) server (OpenSharing protocol + proxy) on HTTPS `:8443`, so a Delta table in the lakehouse can be handed to an external recipient without giving them cluster access. Drive it with `./lakehouse share <seed|start|stop|status|profile>`; `share profile` emits a `.share` profile file a recipient points a Delta Sharing client at.
+- **Dashboard** — a read-only Next.js viewer on `:3000` (`docker-compose-dashboard.yml`) that renders catalog contents and demo output. It never writes — it's a window onto the lakehouse, useful when showing someone the result of a demo without dropping them into a notebook.
 
 ## What's here
 
 ```
 open-lakehouse/
-├── lakehouse                       Top-level CLI (start/stop/status/test/migrate)
-├── docker-compose-*.yml            One compose file per service (Spark + Connect, Kafka, UC, MLflow, Airflow, Notebooks)
+├── lakehouse                       Top-level CLI (setup/start/stop/status/test/migrate/reset/share)
+├── docker-compose-*.yml            One compose file per service (Spark + Connect, Kafka, storage, UC, MLflow, Airflow, Notebooks, sharing, dashboard)
 ├── config/                         Spark, Unity Catalog, MLflow, Airflow configs (examples only — live configs are gitignored)
-├── demos/                          Four demo slots (see below)
-├── docs/                           Human-facing documentation
-├── scripts/                        Helper scripts (download-jars, testdata, connectivity smoke tests)
+├── demos/                          Runnable demos + the _template contract (see below)
+├── dashboard/                      Read-only Next.js viewer for the lakehouse (:3000)
+├── docker/                         Service Dockerfiles (Airflow image, Delta Sharing server)
+├── docs/                           Human-facing documentation + architecture diagrams
+├── scripts/                        Helper scripts (download-jars, testdata, sharing, connectivity smoke tests)
 ├── tests/                          pytest unit + integration
 ├── terraform/                      AWS self-hosted deployment (EMR + RDS + S3 + UC)
 ├── terraform-databricks/           Databricks-managed destination
@@ -112,14 +124,22 @@ open-lakehouse/
 
 ## Demos
 
-The `demos/` directory ships with these four placeholders (Connect-first by default):
+Ten demos are built out and runnable today (Connect-first by default); two slots are placeholders that get filled demo-by-demo, never fabricated. The full catalog with per-demo status lives in [`demos/README.md`](demos/README.md).
 
 | Demo | Transport | What it shows |
 |------|-----------|----------------|
-| [`sdp-medallion/`](demos/sdp-medallion/) | `spark-pipelines` (Connect-backed) | Bronze → Silver → Gold via Spark Declarative Pipelines |
-| [`unity-catalog-multi-engine/`](demos/unity-catalog-multi-engine/) | Spark Connect + DuckDB | One catalog, multiple engines reading the same Iceberg table |
-| [`realtime-mode/`](demos/realtime-mode/) | Spark Connect (Structured Streaming) | Kafka → Iceberg with watermarked dedup |
-| [`local-mode-spark/`](demos/local-mode-spark/) | Local (no cluster) — **not yet implemented** | In-process SparkSession; placeholder for `--spark-local` |
+| [`quick-start/`](demos/quick-start/) | Spark Connect | First governed Delta table via the three-level namespace, query, and an ACID update — the onboarding path |
+| [`sdp-medallion/`](demos/sdp-medallion/) | `spark-pipelines` | Bronze → Silver → Gold via Spark Declarative Pipelines, materialized as Delta in UC |
+| [`sdp-imperative-to-declarative/`](demos/sdp-imperative-to-declarative/) | Connect + `spark-pipelines` | The same medallion written twice — imperative PySpark vs SDP — to show what SDP removes |
+| [`sdp-streaming-batch-sql/`](demos/sdp-streaming-batch-sql/) | `spark-pipelines` | `CREATE STREAMING TABLE` vs `CREATE MATERIALIZED VIEW` — streaming vs batch semantics, in SQL |
+| [`sdp-cli-lifecycle/`](demos/sdp-cli-lifecycle/) | `spark-pipelines` | The `spark-pipelines` developer loop — `init`, `dry-run`, `run` |
+| [`delta-deep-dive/`](demos/delta-deep-dive/) | Spark Connect | Delta ACID DML, time travel, schema evolution, and OPTIMIZE |
+| [`unity-catalog/`](demos/unity-catalog/) | Spark Connect | UC three-level namespace, external Delta registration, metadata via SQL + REST |
+| [`analytics/`](demos/analytics/) | Spark Connect | Revenue / regional / window-function SQL on a governed table, with charts to PNG |
+| [`mlflow-tracking/`](demos/mlflow-tracking/) | Spark Connect + MLflow | Experiment tracking, run comparison, Model Registry, and a `champion` alias |
+| [`realtime-mode/`](demos/realtime-mode/) | `spark-submit` (Structured Streaming) | Kafka → Kafka stateless guardrail in Real-Time Mode, dynamic topic routing |
+| [`unity-catalog-multi-engine/`](demos/unity-catalog-multi-engine/) | Spark Connect + DuckDB | *Placeholder* — one catalog, multiple engines reading the same table |
+| [`local-mode-spark/`](demos/local-mode-spark/) | Local (no cluster) | *Not yet implemented* — in-process SparkSession behind the `--spark-local` flag |
 
 Each follows the [`demos/_template/`](demos/_template/) README contract (Purpose / Prereqs / Run / Expected output / Teardown). To scaffold a new demo:
 

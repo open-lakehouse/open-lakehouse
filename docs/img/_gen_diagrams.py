@@ -227,12 +227,13 @@ def architecture(theme_name):
            "middle")
 
     # ---- RIGHT: ops & tooling (aligned beside catalog + storage) ----
-    s.text(rx, 500 - 14, "OPERATIONS & TOOLING", 12.5, t["muted"], "700",
+    s.text(rx, 480 - 14, "OPERATIONS & TOOLING", 12.5, t["muted"], "700",
            spacing="1.2")
     cards = [
-        ("Airflow  :8085", "orchestration", 500),
-        ("MLflow  :5000 / :5001", "tracking + AI gateway", 578),
-        ("Dashboard  (Next.js)", "read-only viewer", 656),
+        ("Airflow  :8085", "orchestration", 480),
+        ("MLflow  :5000 / :5001", "tracking + AI gateway", 558),
+        ("Dashboard  :3000", "read-only Next.js viewer", 636),
+        ("Delta Sharing  :8443", "OpenSharing + proxy", 714),
     ]
     _, ostroke, oink = lay["ops"]
     for label, sub, oy in cards:
