@@ -188,10 +188,11 @@ def architecture(theme_name):
     # ---- STORAGE ----
     yst = 700
     s.band(cx, yst, cw, 138, "storage", "STORAGE — SeaweedFS (S3-compatible)")
-    s.text(cx + 22, yst + 62, "SeaweedFS  :8333   →   s3://warehouse/", 14,
+    s.text(cx + 22, yst + 62, "SeaweedFS  :8333   →   s3://lakehouse/warehouse/", 14,
            t["ink"], "600", font=MONO)
     s.chip_row(cx + 20, yst + 82,
-               ["bronze/", "silver/", "gold/", "delta/", "_checkpoints/"],
+               ["bronze/", "silver/", "gold/", "_checkpoints/",
+                "pipeline-history/"],
                size=12.5)
 
     # ---- center vertical arrows ----
@@ -283,7 +284,7 @@ def medallion(theme_name):
                    t["muted"], "600", "middle", font=MONO)
 
     s.text(40, by + bh + 54,
-           "Checkpoints live under  s3://warehouse/_checkpoints/<dataset>/  "
+           "Checkpoints live under  s3://lakehouse/warehouse/_checkpoints/<dataset>/  "
            "so streams resume cleanly after restart.",
            13, t["muted"], "400", font=MONO)
     return s.render()
