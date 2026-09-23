@@ -71,6 +71,21 @@ jobs:
       - run: pipx install poetry==2.1.0
       - run: poetry install --with dev,test
 
+      - name: Prepare env (.env + configs from examples)
+        run: |
+          cp .env.example .env
+          {
+            echo "POSTGRES_USER=lakehouse"
+            echo "POSTGRES_PASSWORD=lakehouse_test_pw"
+            echo "S3_BUCKET=lakehouse"
+            echo "S3_WAREHOUSE=s3a://lakehouse/warehouse"
+          } >> .env
+          cp config/spark/spark-defaults.conf.example config/spark/spark-defaults.conf
+          # Align spark-defaults S3 creds with .env — setup's credential-consistency
+          # check is fatal on the placeholder key / on a mismatch vs .env.
+          sed -i "s|your_access_key|lakehouse_s3|; s|your_secret_key|lakehouse_s3_secret|" \
+            config/spark/spark-defaults.conf
+
       - name: Setup (download the pinned/good JAR set)
         run: ./lakehouse setup
 
