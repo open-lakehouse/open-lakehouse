@@ -22,38 +22,33 @@ All components are Apache-2.0 or Apache-compatible permissive licenses. See [NOT
 
 ## Architecture
 
-```
-┌──────────────────────────────────────────────────────────────────────────┐
-│  CLIENTS                                                                 │
-│  PySpark (sc://...)  ·  spark-pipelines (SDP)  ·  DuckDB  ·  PyIceberg   │
-└────────┬──────────────────────────────────────────────────┬──────────────┘
-         │ Spark Connect gRPC                               │ Iceberg REST
-         │ sc://localhost:15002                             │ (multi-engine)
-         ▼                                                  │
-┌─────────────────────────────────────┐                     │
-│  COMPUTE                            │                     │
-│   spark-connect-41   :15002         │                     │
-│   spark-master-41    :7078  UI 8082 │                     │
-│   spark-worker-41           UI 8083 │                     │
-└──────────┬──────────────────────────┘                     │
-           │ Iceberg REST                                   │
-           ▼                                                ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  CATALOG                                                             │
-│   Unity Catalog OSS :8081  ──  PostgreSQL :5432 (UC metastore)       │
-└──────────┬───────────────────────────────────────────────────────────┘
-           │
-           ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│  STORAGE                                                             │
-│   SeaweedFS :8333  →  s3://warehouse/{bronze,silver,gold}/           │
-└──────────────────────────────────────────────────────────────────────┘
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/architecture-dark.png">
+    <img alt="open-lakehouse architecture. Clients (PySpark, spark-pipelines, DuckDB, PyIceberg, Trino, JupyterLab) reach a Spark 4.1 Connect-first compute layer over gRPC on port 15002; non-Spark engines also read directly from the catalog over Iceberg REST. Unity Catalog OSS on port 8081 is the only catalog, backed by PostgreSQL, and writes land in SeaweedFS object storage under s3://warehouse. Kafka feeds the streaming path; Airflow, MLflow and a read-only dashboard sit alongside." src="docs/img/architecture-light.png" width="900">
+  </picture>
+</p>
 
-      Kafka :9092 / Zookeeper :2181  feed events into the Connect client,
-      which lands them in Iceberg via Unity Catalog.
-```
+Four layers, one catalog, one Spark version:
 
-Optional services not shown: MLflow Tracking + AI Gateway (`:5000`/`:5001`), Airflow (`:8085`), JupyterLab (`:8889`). Full details in [`docs/architecture.md`](docs/architecture.md).
+- **Clients** — Spark or not — reach **compute** over Spark Connect gRPC (`sc://localhost:15002`). Non-Spark engines (DuckDB, Trino, PyIceberg) read straight from the catalog over Iceberg REST, no Spark required.
+- **Compute** is Spark 4.1 in Connect-first mode (`spark-connect-41`, master, worker).
+- **Unity Catalog OSS** (`:8081`) is the *only* catalog — Delta on the write path, Iceberg REST as a read-only multi-engine surface. Its metadata lives in **PostgreSQL** (`:5432`).
+- **Storage** is **SeaweedFS** (S3-compatible, `:8333`) under `s3://warehouse/`.
+- Alongside: **Kafka** (`:9092`) feeds the streaming path, and **Airflow** (`:8085`), **MLflow** (`:5000`/`:5001`) and a read-only **dashboard** handle orchestration, tracking, and viewing.
+
+Full detail — every port, the config keys, and the write-path/read-path split — is in [`docs/architecture.md`](docs/architecture.md).
+
+### Streaming data flow
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/medallion-flow-dark.png">
+    <img alt="Streaming data flow. A Kafka topic on port 9092 is read by Spark Structured Streaming (Spark 4.1) and written to a Bronze table (Delta, registered in Unity Catalog); Silver and Gold tables are then derived from Bronze by Spark Declarative Pipelines." src="docs/img/medallion-flow-light.png" width="900">
+  </picture>
+</p>
+
+Kafka → Spark Structured Streaming lands raw events in **bronze** (Delta, registered in UC); **silver** and **gold** derive from bronze via Spark Declarative Pipelines. Checkpoints under `s3://warehouse/_checkpoints/` let streams resume cleanly after a restart.
 
 ## Quickstart
 
