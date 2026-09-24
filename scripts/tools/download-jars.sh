@@ -1,7 +1,19 @@
 #!/bin/bash
 
 # Download required JARs for open-lakehouse (Spark 4.1, Iceberg 1.10, Delta 4.3)
-# Supports --verify-only flag for CI validation
+#
+# Integrity model (docs/testing.md — supply chain): each jar is verified by
+# sha256 against a committed lockfile (scripts/tools/jars.sha256), not just by
+# size. A size check cannot catch a re-published or tampered artifact of similar
+# size; a sha256 can. A checksum MISMATCH is always fatal (the file is deleted).
+#
+# Flags:
+#   --verify-only        verify already-downloaded jars (size + sha256), no fetch
+#   --lock               (re)download everything, then WRITE jars.sha256 from the
+#                        actual bytes. Run on a networked machine to generate or
+#                        refresh the lock after a version bump; commit the result.
+#   --strict-checksums   a jar with no lock entry is a FAILURE (default: warn), so
+#                        CI can require the lock to cover every pinned jar.
 
 set -e  # Exit on error
 
@@ -9,8 +21,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JARS_DIR="${SCRIPT_DIR}/../../jars"
 mkdir -p "${JARS_DIR}"
 JARS_DIR="$(cd "${JARS_DIR}" && pwd)"
+LOCK_FILE="${SCRIPT_DIR}/jars.sha256"
 
 VERIFY_ONLY=false
+LOCK_MODE=false
+STRICT_CHECKSUMS=false
 MAX_RETRIES=3
 RETRY_DELAY=5
 
@@ -29,6 +44,8 @@ NC='\033[0m'
 for arg in "$@"; do
     case $arg in
         --verify-only) VERIFY_ONLY=true ;;
+        --lock) LOCK_MODE=true ;;
+        --strict-checksums) STRICT_CHECKSUMS=true ;;
     esac
 done
 
@@ -96,6 +113,55 @@ verify_size() {
     fi
 }
 
+# Compute a file's sha256 (cross-platform: coreutils sha256sum or macOS shasum).
+sha256_of() {
+    local file=$1
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" | awk '{print $1}'
+    else
+        echo ""   # no tool → verify_checksum treats as "cannot verify"
+    fi
+}
+
+# The expected sha256 for a jar from the lockfile (sha256sum format:
+# "<hash>  <filename>"). Empty if the jar has no lock entry.
+lock_sha() {
+    [ -f "$LOCK_FILE" ] || { echo ""; return; }
+    awk -v n="$1" '$2==n {print $1; exit}' "$LOCK_FILE"
+}
+
+# Verify a jar against the lock. 0 = ok (matched, or no entry in non-strict mode);
+# 1 = fatal (mismatch, or missing entry under --strict-checksums, or no hash tool
+# when an entry exists).
+verify_checksum() {
+    local file=$1 name=$2
+    local want; want="$(lock_sha "$name")"
+
+    if [ -z "$want" ]; then
+        if [ "$STRICT_CHECKSUMS" = true ]; then
+            echo -e "   ${RED}No sha256 lock entry for ${name} (--strict-checksums)${NC}"
+            return 1
+        fi
+        echo -e "   ${YELLOW}⚠ no sha256 lock entry for ${name} — run --lock to pin it${NC}"
+        return 0
+    fi
+
+    local got; got="$(sha256_of "$file")"
+    if [ -z "$got" ]; then
+        echo -e "   ${RED}Cannot compute sha256 (no sha256sum/shasum) but lock expects one${NC}"
+        return 1
+    fi
+    if [ "$got" = "$want" ]; then
+        return 0
+    fi
+    echo -e "   ${RED}sha256 MISMATCH for ${name}${NC}"
+    echo -e "   ${RED}  expected ${want}${NC}"
+    echo -e "   ${RED}  actual   ${got}${NC}"
+    return 1
+}
+
 # Download with retry
 download_with_retry() {
     local url=$1
@@ -142,11 +208,14 @@ if [ "$VERIFY_ONLY" = true ]; then
         if [ ! -f "$jar_path" ]; then
             echo -e "${RED}✗${NC} $jar_name (missing)"
             has_errors=1
-        elif verify_size "$jar_path" "$min_size"; then
-            echo -e "${GREEN}✓${NC} $jar_name (OK)"
-        else
+        elif ! verify_size "$jar_path" "$min_size"; then
             echo -e "${RED}✗${NC} $jar_name (invalid size)"
             has_errors=1
+        elif ! verify_checksum "$jar_path" "$jar_name"; then
+            echo -e "${RED}✗${NC} $jar_name (sha256 failed)"
+            has_errors=1
+        else
+            echo -e "${GREEN}✓${NC} $jar_name (OK)"
         fi
     done
 
@@ -167,8 +236,10 @@ for jar_entry in "${JAR_LIST[@]}"; do
 
     echo -e "\n${YELLOW}[$current/$total]${NC} $jar_name"
 
-    # Skip if already exists and valid
-    if [ -f "$jar_name" ] && verify_size "$jar_name" "$min_size"; then
+    # Skip if already exists and valid (size AND sha256 — a cached but tampered
+    # file must not be trusted just because it is present).
+    if [ -f "$jar_name" ] && verify_size "$jar_name" "$min_size" \
+        && verify_checksum "$jar_name" "$jar_name"; then
         echo -e "   ${GREEN}Already exists and valid${NC}"
         continue
     fi
@@ -176,12 +247,16 @@ for jar_entry in "${JAR_LIST[@]}"; do
     # Download
     echo -e "   Downloading..."
     if download_with_retry "$url" "$jar_name"; then
-        if verify_size "$jar_name" "$min_size"; then
-            echo -e "   ${GREEN}✓${NC} Download complete"
-        else
-            echo -e "   ${RED}✗${NC} Downloaded file appears corrupt"
+        if ! verify_size "$jar_name" "$min_size"; then
+            echo -e "   ${RED}✗${NC} Downloaded file appears corrupt (size)"
             rm -f "$jar_name"
             failed=$((failed + 1))
+        elif ! verify_checksum "$jar_name" "$jar_name"; then
+            echo -e "   ${RED}✗${NC} Downloaded file failed sha256 verification"
+            rm -f "$jar_name"
+            failed=$((failed + 1))
+        else
+            echo -e "   ${GREEN}✓${NC} Download complete"
         fi
     else
         failed=$((failed + 1))
@@ -191,14 +266,35 @@ done
 echo ""
 echo "================================"
 
-if [ $failed -eq 0 ]; then
-    echo -e "${GREEN}All JARs downloaded successfully!${NC}"
-    echo ""
-    echo "Total size:"
-    du -sh "${JARS_DIR}"
-    exit 0
-else
+if [ $failed -ne 0 ]; then
     echo -e "${RED}$failed JAR(s) failed to download${NC}"
     echo "Run script again to retry failed downloads"
     exit 1
 fi
+
+echo -e "${GREEN}All JARs downloaded successfully!${NC}"
+echo ""
+echo "Total size:"
+du -sh "${JARS_DIR}"
+
+# --lock: (re)generate the committed sha256 lock from the bytes we just verified.
+if [ "$LOCK_MODE" = true ]; then
+    echo ""
+    echo "Writing sha256 lock → ${LOCK_FILE}"
+    {
+        echo "# sha256 lock for open-lakehouse pinned JARs (docs/testing.md)."
+        echo "# Generated by: scripts/tools/download-jars.sh --lock"
+        echo "# Regenerate after any version bump and commit the diff."
+    } > "${LOCK_FILE}.tmp"
+    for jar_entry in "${JAR_LIST[@]}"; do
+        IFS='|' read -r jar_name _url _min_size <<< "$jar_entry"
+        h="$(sha256_of "${JARS_DIR}/${jar_name}")"
+        [ -n "$h" ] && printf '%s  %s\n' "$h" "$jar_name" >> "${LOCK_FILE}.tmp"
+    done
+    # Keep the header, sort the entries for a stable, diff-friendly lock.
+    { grep '^#' "${LOCK_FILE}.tmp"; grep -v '^#' "${LOCK_FILE}.tmp" | sort; } > "${LOCK_FILE}"
+    rm -f "${LOCK_FILE}.tmp"
+    echo -e "${GREEN}Lock written with $(grep -vc '^#' "${LOCK_FILE}") entries.${NC}"
+fi
+
+exit 0

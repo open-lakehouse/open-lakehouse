@@ -1,0 +1,142 @@
+name: Version matrix (T4)
+
+# The version-change gate (Tier 4 in docs/testing.md). A pin bump is the highest-
+# risk change in this repo, so it is not enough to show the NEW version works —
+# we also prove the KNOWN-BAD versions still fail the exact way the pin's
+# rationale says they do. If a "bad" version starts passing, the rationale is
+# stale and a human must reconcile docs/testing.md before the pin can move.
+#
+# Delta is the canonical case (I-02): 4.3.1 is the pin; 4.3.0 NPEs through the UC
+# Spark connector; 4.2.0 cannot do catalog-managed Delta. This matrix swaps each
+# onto the live classpath and asserts pass/fail against expectation.
+#
+# NOTE: authored against the ./lakehouse stack + tests/integration/test_delta_version.py
+# but NOT yet calibrated on a live runner (Docker/Maven were unavailable at
+# authoring time). The first dispatch run is the calibration pass — in particular
+# confirm the bad-version failure signatures match the rationale, and tighten the
+# assertion (see the "assert outcome" step) if a bad version fails for the wrong
+# reason.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/tools/download-jars.sh'
+      - 'config/spark/spark-defaults.conf.example'
+      - 'CLAUDE.md'
+      - 'docs/testing.md'
+      - 'docs/compatibility.md'
+      - '.github/workflows/version-matrix.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: version-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast static fail on the tracked tree before any Docker work. --tracked-only so
+  # the (intentionally forbidden) live-conf swap the matrix does below is not what
+  # this checks — it gates the committed files only.
+  preflight:
+    name: Preflight (T0 static)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: bash scripts/tools/verify-versions.sh --tracked-only
+
+  delta-abi-matrix:
+    name: Delta ${{ matrix.delta }} — expect ${{ matrix.expect }}
+    runs-on: ubuntu-latest
+    needs: preflight
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - delta: "4.3.1"   # the pin — must PASS
+            expect: pass
+          - delta: "4.3.0"   # NPEs through the UC connector — must FAIL
+            expect: fail
+          - delta: "4.2.0"   # no catalog-managed Delta — must FAIL
+            expect: fail
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pipx install poetry==2.1.0
+      - run: poetry install --with dev,test
+
+      - name: Prepare env (.env + configs from examples)
+        run: |
+          cp .env.example .env
+          {
+            echo "POSTGRES_USER=lakehouse"
+            echo "POSTGRES_PASSWORD=lakehouse_test_pw"
+            echo "S3_BUCKET=lakehouse"
+            echo "S3_WAREHOUSE=s3a://lakehouse/warehouse"
+          } >> .env
+          cp config/spark/spark-defaults.conf.example config/spark/spark-defaults.conf
+          # Align spark-defaults S3 creds with .env — setup's credential-consistency
+          # check is fatal on the placeholder key / on a mismatch vs .env.
+          sed -i "s|your_access_key|lakehouse_s3|; s|your_secret_key|lakehouse_s3_secret|" \
+            config/spark/spark-defaults.conf
+
+      - name: Start storage FIRST (PostgreSQL + SeaweedFS)
+        # setup runs setup_postgres (needs PG up) — storage must precede it.
+        run: ./lakehouse start storage
+
+      - name: Setup (download the pinned/good JAR set, init PG DBs)
+        run: ./lakehouse setup
+
+      - name: Swap Delta onto the live classpath
+        run: bash scripts/tools/swap-delta-version.sh "${{ matrix.delta }}"
+
+      - name: Bring up Spark (reads the swapped live conf — storage already up)
+        run: ./lakehouse start all
+
+      - name: Readiness gate (spark-master must be up — a down master is a failure)
+        run: |
+          set -e
+          ./lakehouse status --json | tee status.json
+          python3 - <<'PY'
+          import json, sys
+          s = json.load(open("status.json"))
+          if not s.get("spark", {}).get("master"):
+              print(f"::error::spark-master not running; cannot evaluate Delta ABI: {s}")
+              sys.exit(1)
+          print("spark-master up — evaluating Delta ABI.")
+          PY
+
+      - name: Run the Delta ABI test, assert outcome matches expectation
+        run: |
+          set +e
+          poetry run pytest \
+            tests/integration/test_delta_version.py::test_i02_delta_write_read_timetravel \
+            -q --no-header
+          rc=$?
+          set -e
+          echo "pytest rc=$rc for Delta ${{ matrix.delta }} (expect ${{ matrix.expect }})"
+          if [ "${{ matrix.expect }}" = "pass" ]; then
+            if [ $rc -ne 0 ]; then
+              echo "::error::Delta ${{ matrix.delta }} was expected to PASS but failed (rc=$rc). The pin may be broken."
+              exit 1
+            fi
+            echo "✓ Delta ${{ matrix.delta }} passed — good pin verified end to end."
+          else
+            if [ $rc -eq 0 ]; then
+              echo "::error::Delta ${{ matrix.delta }} was expected to FAIL but PASSED. The pin rationale is STALE — reconcile docs/testing.md and docs/compatibility.md before moving the pin."
+              exit 1
+            fi
+            echo "✓ Delta ${{ matrix.delta }} failed as expected — negative gate holds."
+          fi
+
+      - name: Teardown (safe stop — never down -v)
+        if: always()
+        run: |
+          ./lakehouse stop all || true
+          ./lakehouse stop storage || true

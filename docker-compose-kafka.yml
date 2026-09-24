@@ -1,4 +1,4 @@
-# Kafka 3.6 + Zookeeper on the shared lakehouse-network bridge (PR #13 / T-1.4).
+# Kafka 3.5 + Zookeeper on the shared lakehouse-network bridge (PR #13 / T-1.4).
 #
 # Dual advertised listeners so both worlds work:
 #   INTERNAL  kafka:9092       — in-network clients (Spark, Airflow) on the bridge
