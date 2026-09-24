@@ -47,12 +47,18 @@ def _spark_submit(script: str, tmp_path: Path) -> str:
         check=True,
         capture_output=True,
     )
-    return subprocess.run(
+    r = subprocess.run(
         ["docker", "exec", MASTER, "/opt/spark/bin/spark-submit", "/tmp/_ivtest.py"],
         capture_output=True,
         text=True,
         timeout=300,
-    ).stdout
+    )
+    # Return BOTH streams: spark-submit writes the driver's print() to stdout but
+    # every error (stack trace, ABI NoSuchMethodError, S3A/connectivity failure)
+    # to stderr. Capturing stdout only made a failed run look like empty output,
+    # which is undiagnosable and lets the negative gate "pass" for the wrong
+    # reason. The I02_PASS / error-signature assertions scan the combined text.
+    return f"{r.stdout}\n--- stderr ---\n{r.stderr}"
 
 
 @pytest.fixture(autouse=True)

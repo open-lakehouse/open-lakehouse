@@ -11,10 +11,14 @@ FROM ghcr.io/mlflow/mlflow:v3.14.0-full
 
 USER root
 
-# Clear the base image's stale apt lists BEFORE update: bullseye-security only
-# keeps the newest patch in its pool, so a cached index pinning an older patch
-# (e.g. libpq5 13.23-0+deb11u4) 404s. A fresh update pulls the current version.
+# Debian 11 "bullseye" LTS ended 2026-08-31, so this base image's apt sources
+# (deb.debian.org/{debian,debian-security}) now 404 on the postgresql-13 /
+# libpq5 pool files. Repoint to archive.debian.org and skip Valid-Until (the
+# archived Release files are "expired") so apt can still fetch postgresql-client.
+# Long-term fix is a base-image bump off bullseye — tracked separately.
 RUN rm -rf /var/lib/apt/lists/* \
+    && sed -i -E 's|https?://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g; s|https?://deb.debian.org/debian|http://archive.debian.org/debian|g; s|https?://security.debian.org|http://archive.debian.org/debian-security|g' /etc/apt/sources.list \
+    && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid-until \
     && apt-get update && apt-get install -y --no-install-recommends \
       postgresql-client \
     && apt-get clean \

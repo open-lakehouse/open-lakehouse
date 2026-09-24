@@ -7,10 +7,13 @@ ARG SPARK_DIST_URL=https://archive.apache.org/dist/spark/spark-4.1.0/spark-4.1.0
 
 USER root
 
-# Install system dependencies. Clear the base image's stale apt lists BEFORE
-# update: bullseye-security keeps only the newest patch in its pool, so a cached
-# index pinning an older patch 404s. A fresh update pulls the current version.
+# Install system dependencies. Debian 11 "bullseye" LTS ended 2026-08-31, so the
+# base image's apt sources (deb.debian.org) now 404 on the postgresql-13 / libpq5
+# pool files. Repoint to archive.debian.org + skip Valid-Until so apt can still
+# fetch. Long-term fix is a base-image bump off bullseye — tracked separately.
 RUN rm -rf /var/lib/apt/lists/* \
+    && sed -i -E 's|https?://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g; s|https?://deb.debian.org/debian|http://archive.debian.org/debian|g; s|https?://security.debian.org|http://archive.debian.org/debian-security|g' /etc/apt/sources.list \
+    && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid-until \
     && apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     openjdk-17-jre-headless \
