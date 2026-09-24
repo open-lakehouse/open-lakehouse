@@ -11,7 +11,11 @@ FROM ghcr.io/mlflow/mlflow:v3.14.0-full
 
 USER root
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Clear the base image's stale apt lists BEFORE update: bullseye-security only
+# keeps the newest patch in its pool, so a cached index pinning an older patch
+# (e.g. libpq5 13.23-0+deb11u4) 404s. A fresh update pulls the current version.
+RUN rm -rf /var/lib/apt/lists/* \
+    && apt-get update && apt-get install -y --no-install-recommends \
       postgresql-client \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

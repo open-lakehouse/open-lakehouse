@@ -7,8 +7,11 @@ ARG SPARK_DIST_URL=https://archive.apache.org/dist/spark/spark-4.1.0/spark-4.1.0
 
 USER root
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies. Clear the base image's stale apt lists BEFORE
+# update: bullseye-security keeps only the newest patch in its pool, so a cached
+# index pinning an older patch 404s. A fresh update pulls the current version.
+RUN rm -rf /var/lib/apt/lists/* \
+    && apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     openjdk-17-jre-headless \
     curl \

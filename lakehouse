@@ -332,7 +332,13 @@ wait_for_services() {
     # Spark (if started)
     if docker ps --format '{{.Names}}' | grep -q "^${master_container}$"; then
         wait_for_service "Spark Master" "nc -z localhost $spark_port" 30
-        wait_for_service "Spark UI" "curl -s http://localhost:$(get_spark_ui_port) >/dev/null" 30
+        # Spark UI (8082) is a diagnostic web surface, not a data-plane dependency:
+        # Connect workloads reach Spark over gRPC (15002) + the master port, never
+        # the UI. On constrained hosts (cold CI runners) the UI can lag well past
+        # the master, so don't fail startup on it — warn and continue. `|| ...`
+        # keeps this non-fatal under `set -e`.
+        wait_for_service "Spark UI" "curl -s http://localhost:$(get_spark_ui_port) >/dev/null" 90 \
+            || echo -e "   ${YELLOW}!${NC} Spark UI slow to start — continuing (not a data-plane dependency)"
     fi
 }
 
