@@ -47,6 +47,12 @@ sed -E \
   -e "s#delta-storage-[0-9]+\.[0-9]+\.[0-9]+\.jar#delta-storage-${VER}.jar#g" \
   "$LIVE" > "$tmp"
 mv "$tmp" "$LIVE"
+# mktemp creates 0600; `mv` preserves it, leaving spark-defaults.conf readable
+# only by the runner user. The Spark container runs as a different (non-root)
+# uid and mounts this file at /opt/spark/conf/spark-defaults.conf, so spark-submit
+# fails with "Permission denied" BEFORE any Delta code loads — which made every
+# matrix leg fail identically (a false negative-gate pass). Keep it world-readable.
+chmod 0644 "$LIVE"
 
 if grep -q "delta-spark_2.13-${VER}.jar" "$LIVE"; then
   echo -e "${GREEN}live spark-defaults.conf now points at Delta ${VER}${NC}"
