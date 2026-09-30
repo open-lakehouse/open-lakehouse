@@ -1,0 +1,41 @@
+name: 'Set up Python + Poetry'
+description: >-
+  Install a pinned Python + Poetry and install project dependencies, with
+  Poetry's package cache keyed on poetry.lock. Centralizes the setup that was
+  duplicated across every CI job so caching lives in one place. Requires the
+  repo to be checked out first (it is a local action).
+
+inputs:
+  python-version:
+    description: 'Python version to install.'
+    default: '3.11'
+  groups:
+    description: >-
+      Poetry dependency groups to install (comma-separated, passed to
+      `--with`). Empty string installs the default group only.
+    default: 'dev'
+
+runs:
+  using: composite
+  steps:
+    # Poetry must be on PATH BEFORE setup-python so setup-python's `cache: poetry`
+    # can locate the dependency cache. pipx on the runner installs to ~/.local/bin,
+    # which is already on PATH. Version pinned to match the rest of CI.
+    - name: Install Poetry
+      shell: bash
+      run: pipx install poetry==2.1.0
+
+    - name: Set up Python (with Poetry cache)
+      uses: actions/setup-python@v6
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: poetry
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.groups }}" ]; then
+          poetry install --with ${{ inputs.groups }}
+        else
+          poetry install
+        fi
