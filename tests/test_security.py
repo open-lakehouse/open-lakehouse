@@ -217,6 +217,7 @@ class TestCISecurityConfig:
         )
         assert wf_files, "expected at least one workflow file to scan"
 
+        unpinned = []
         for wf in wf_files:
             for line in wf.read_text().split("\n"):
                 if "uses:" not in line:
@@ -229,9 +230,10 @@ class TestCISecurityConfig:
                 if action.startswith(("actions/", "github/")):
                     continue
                 # Third-party: require a 40-char commit SHA.
-                assert re.fullmatch(r"[a-f0-9]{40}", ref), (
-                    f"Third-party action must be SHA-pinned in {wf.name}: {line.strip()}"
-                )
+                if not re.fullmatch(r"[a-f0-9]{40}", ref):
+                    unpinned.append(f"{wf.name}: {line.strip()}")
+
+        assert not unpinned, f"Third-party actions must be SHA-pinned: {unpinned}"
 
     @pytest.mark.security
     def test_ci_has_permissions_block(self):
