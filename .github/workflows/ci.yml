@@ -5,7 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    # Deliberately NO `edited`: it fires on every PR title/body edit and would
+    # re-run the whole CI on a description tweak. synchronize covers new commits.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -20,19 +22,13 @@ jobs:
   lint:
     name: Lint & validate
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: ./.github/actions/setup-poetry
         with:
-          python-version: '3.11'
-
-      - name: Install Poetry
-        run: pipx install poetry==2.1.0
-
-      - name: Install dependencies
-        run: poetry install --with dev
+          groups: dev
 
       - name: Ruff
         run: poetry run ruff check scripts/ tests/ demos/
@@ -67,16 +63,13 @@ jobs:
     name: Unit tests
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - uses: ./.github/actions/setup-poetry
         with:
-          python-version: '3.11'
-
-      - run: pipx install poetry==2.1.0
-
-      - run: poetry install --with dev,test
+          groups: dev,test
 
       - name: pytest (unit only, no docker)
         run: poetry run pytest tests/ --ignore=tests/integration -v
@@ -85,6 +78,7 @@ jobs:
     name: Verify Spark 4.1 image pulls
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
@@ -99,16 +93,13 @@ jobs:
     name: Security scan
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - uses: ./.github/actions/setup-poetry
         with:
-          python-version: '3.11'
-
-      - run: pipx install poetry==2.1.0
-
-      - run: poetry install --with dev,test
+          groups: dev,test
 
       - name: pytest -m security
         run: poetry run pytest -m security -v
@@ -117,6 +108,7 @@ jobs:
     name: SBOM & supply-chain
     runs-on: ubuntu-latest
     needs: lint
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
 

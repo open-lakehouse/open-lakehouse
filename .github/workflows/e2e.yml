@@ -45,6 +45,7 @@ jobs:
   preflight:
     name: Preflight (T0 static)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - name: Version-consistency gate
@@ -63,12 +64,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - uses: ./.github/actions/setup-poetry
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - run: pipx install poetry==2.1.0
-      - run: poetry install --with dev,test
+          groups: dev,test
 
       - name: Cache JAR downloads
         uses: actions/cache@v4
