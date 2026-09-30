@@ -181,23 +181,33 @@ class TestCISecurityConfig:
 
         Per GitHub's own guidance, major-version tags (@v4) from first-party
         publishers (actions/*, github/*) are acceptable. Floating refs like
-        @main or @master are not.
+        @main or @master are not. Scans every workflow file. Local composite
+        actions (`uses: ./…`) are in-repo at the checked-out commit — pinned by
+        definition, no @ref to check.
         """
-        ci_path = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
-        if not ci_path.exists():
-            pytest.skip("CI workflow not found")
+        workflows_dir = PROJECT_ROOT / ".github" / "workflows"
+        if not workflows_dir.exists():
+            pytest.skip("no workflows directory")
 
-        content = ci_path.read_text()
-        uses_lines = [line for line in content.split("\n") if "uses:" in line]
+        wf_files = sorted(workflows_dir.glob("*.yml")) + sorted(
+            workflows_dir.glob("*.yaml")
+        )
+        assert wf_files, "expected at least one workflow file to scan"
 
-        for line in uses_lines:
-            # Reject floating refs (no @, or @main / @master / @latest)
-            assert re.search(
-                r"@[a-zA-Z0-9._-]+", line
-            ), f"Action must be pinned, not floating: {line.strip()}"
-            assert not re.search(
-                r"@(main|master|latest|HEAD)\b", line
-            ), f"Action pinned to floating ref: {line.strip()}"
+        for wf in wf_files:
+            for line in wf.read_text().split("\n"):
+                if "uses:" not in line:
+                    continue
+                # Local composite actions live in-repo — pinned by definition.
+                if re.search(r"uses:\s*\./", line):
+                    continue
+                # Reject floating refs (no @, or @main / @master / @latest)
+                assert re.search(
+                    r"@[a-zA-Z0-9._-]+", line
+                ), f"Action must be pinned, not floating in {wf.name}: {line.strip()}"
+                assert not re.search(
+                    r"@(main|master|latest|HEAD)\b", line
+                ), f"Action pinned to floating ref in {wf.name}: {line.strip()}"
 
     @pytest.mark.security
     def test_no_third_party_actions_unpinned(self):
