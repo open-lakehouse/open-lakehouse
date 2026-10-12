@@ -162,9 +162,9 @@ the image — entries are appended to `spark-defaults.conf` at container start.
 ## Image
 
 The image (`terraform/spark-ecs/docker/`) is a thin layer over
-`apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu` that bakes in the
+`apache/spark:4.1.3-scala2.13-java21-python3-r-ubuntu` that bakes in the
 lakehouse JARs (Delta 4.2.0, Iceberg 1.10.0, Unity Catalog connector 0.3.0,
-Hadoop-AWS 3.4.1, AWS SDK v2 2.24.6, Spark Connect 4.1.0) plus the entrypoint
+Hadoop-AWS 3.4.1, AWS SDK v2 2.24.6, Spark Connect 4.1.3) plus the entrypoint
 that selects the role via `SPARK_ROLE`.
 
 ## Cost & teardown
