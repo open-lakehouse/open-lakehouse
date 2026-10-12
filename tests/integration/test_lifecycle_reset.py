@@ -508,7 +508,7 @@ def test_i52b_failed_reset_stays_stopped_and_doctor_reports(
 
 REAL_DOCKER = shutil.which("docker")
 
-UC_IMAGE = os.environ.get("LAKEHOUSE_UC_IMAGE", "unitycatalog/unitycatalog:v0.5.0")
+UC_IMAGE = os.environ.get("LAKEHOUSE_UC_IMAGE", "unitycatalog/unitycatalog:v0.6.0")
 PY_IMAGE = os.environ.get("LAKEHOUSE_HTTP_IMAGE", "python:3-alpine")
 ALPINE_IMAGE = os.environ.get("LAKEHOUSE_ALPINE_IMAGE", "alpine:latest")
 
@@ -685,7 +685,7 @@ def post(path, body):
     r = urllib.request.Request(api + path, data=json.dumps(body).encode(),
         headers={{"Content-Type": "application/json"}}, method="POST")
     urllib.request.urlopen(r, timeout=10)
-# UC 0.5.0 validates the column type descriptor — an empty type_json 400s.
+# UC 0.6.0 validates the column type descriptor — an empty type_json 400s.
 tj = json.dumps({{"name": "id", "type": "integer", "nullable": True, "metadata": {{}}}})
 post("/catalogs", {{"name": "{cat}"}})
 post("/schemas", {{"name": "{sch}", "catalog_name": "{cat}"}})

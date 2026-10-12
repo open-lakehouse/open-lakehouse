@@ -27,8 +27,8 @@ spark.sql.catalog.unity.token             not_used
 # (delta.feature.catalogManaged). The catalog assigns table locations under its
 # storage_root, so SQL `.sql` SDP transformations materialize with no explicit
 # LOCATION. Create the catalog once with a storage_root (see
-# demos/sdp-medallion/README.md). Requires Delta 4.3.1 + the UC 0.5.x connector
-# family (connector 0.4.1 + client 0.5.1 + hadoop 0.5.1) below.
+# demos/sdp-medallion/README.md). Requires Delta 4.3.1 + the UC 0.6.x connector
+# family (connector 0.6.0 + client 0.6.0 + hadoop 0.6.0) below.
 spark.sql.catalog.managed_demo            io.unitycatalog.spark.UCSingleCatalog
 spark.sql.catalog.managed_demo.uri        http://unity-catalog:8080
 spark.sql.catalog.managed_demo.token      not_used
@@ -74,8 +74,8 @@ spark.hadoop.fs.AbstractFileSystem.s3.impl org.apache.hadoop.fs.s3a.S3A
 # ============================================================================
 # All downloaded by `./lakehouse setup` (scripts/tools/download-jars.sh).
 # Delta is 4.3.1 — ABI-verified on Spark 4.1/Java21 and required for catalog-managed
-# Delta via the UC 0.5.x connector family (4.3.0 NPEs through the connector; I-02).
-spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/delta-spark_2.13-4.3.1.jar,/opt/spark/jars-extra/delta-storage-4.3.1.jar,/opt/spark/jars-extra/unitycatalog-spark_2.13-0.4.1.jar,/opt/spark/jars-extra/unitycatalog-client-0.5.1.jar,/opt/spark/jars-extra/unitycatalog-hadoop-0.5.1.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar
+# Delta via the UC 0.6.x connector family (4.3.0 NPEs through the connector; I-02).
+spark.jars  /opt/spark/jars-extra/iceberg-spark-runtime-4.0_2.13-1.10.0.jar,/opt/spark/jars-extra/delta-spark_2.13-4.3.1.jar,/opt/spark/jars-extra/delta-storage-4.3.1.jar,/opt/spark/jars-extra/unitycatalog-spark_4.1_2.13-0.6.0.jar,/opt/spark/jars-extra/unitycatalog-client-0.6.0.jar,/opt/spark/jars-extra/unitycatalog-hadoop-0.6.0.jar,/opt/spark/jars-extra/hadoop-aws-3.4.1.jar,/opt/spark/jars-extra/aws-java-sdk-bundle-1.12.780.jar,/opt/spark/jars-extra/bundle-2.24.6.jar
 
 # ============================================================================
 # Performance Tuning

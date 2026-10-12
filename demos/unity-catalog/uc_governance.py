@@ -101,7 +101,7 @@ def main() -> None:
     spark.sql(f"DESCRIBE EXTENDED {CORE}.dim_regions").show(truncate=False)
 
     # --- 5. UC REST API (programmatic discovery) ----------------------------
-    # type / format / location are populated; UC 0.5.0's /tables omits column
+    # type / format / location are populated; UC 0.6.0's /tables omits column
     # metadata for connector-registered external tables (columns live in the Delta
     # log — see DESCRIBE above).
     table = uc_get("tables/unity.uc_demo_core.dim_regions")

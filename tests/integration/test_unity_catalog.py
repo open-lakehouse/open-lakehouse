@@ -222,7 +222,7 @@ class TestUnityCatalogLive:
 
 
 # =================================================================================
-# PR #13 / D2 gates — UC 0.5.0 upgrade (I-44, I-47) + round-trip (I-08)
+# PR #13 / D2 gates — UC 0.6.0 upgrade (I-44, I-47) + round-trip (I-08)
 # =================================================================================
 
 import json  # noqa: E402
@@ -271,7 +271,7 @@ def _master_running() -> bool:
 
 @pytest.mark.integration
 class TestUC050Gates:
-    """Live D2 gates against the official unitycatalog/unitycatalog:v0.5.0 image."""
+    """Live D2 gates against the official unitycatalog/unitycatalog:v0.6.0 image."""
 
     @pytest.fixture(autouse=True)
     def _require_uc(self):
@@ -324,7 +324,7 @@ class TestUC050Gates:
 
     @pytest.mark.skipif(not _master_running(), reason=f"{MASTER} not running")
     def test_i44_i08_catalog_schema_delta_roundtrip(self, tmp_path):
-        # I-44: create catalog/schema/Delta table + credential-vended write on v0.5.0.
+        # I-44: create catalog/schema/Delta table + credential-vended write on v0.6.0.
         # I-08: read it back via the UC Spark connector.
         sfx = uuid.uuid4().hex[:8]
         cat, sch = "unity", f"i44_{sfx}"
@@ -365,4 +365,4 @@ class TestUC050Gates:
             urllib.request.urlopen(req, timeout=8)
         except Exception:
             pass
-        assert "I44_PASS" in out, f"UC 0.5.0 Delta round-trip failed:\n{out[-1500:]}"
+        assert "I44_PASS" in out, f"UC 0.6.0 Delta round-trip failed:\n{out[-1500:]}"

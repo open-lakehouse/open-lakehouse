@@ -280,11 +280,11 @@ class TestDeltaFormat:
 
 
 # =================================================================================
-# I-45 — Catalog-managed Delta (PR #13 / T-1.19, the concrete UC 0.5.0 win)
+# I-45 — Catalog-managed Delta (PR #13 / T-1.19, the concrete UC 0.6.0 win)
 # =================================================================================
 # A `USING delta` create with delta.feature.catalogManaged + the required
 # writeStats* properties and NO explicit location materializes under the catalog's
-# storage_root (…/__unitystorage/…). Requires Delta 4.3.1 + the UC 0.5.x connector
+# storage_root (…/__unitystorage/…). Requires Delta 4.3.1 + the UC 0.6.x connector
 # family. Runs inside spark-master-41 (real jars + spark-defaults). The full
 # sdp-medallion SQL pipeline exercises the same path via `spark-pipelines`
 # (demos/sdp-medallion/run.sh); this is the minimal, deterministic gate.
