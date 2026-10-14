@@ -18,6 +18,7 @@ import {
   ChevronUp,
   ExternalLink,
 } from "lucide-react";
+import JupyterLaunchButton from "@/components/jupyter-launch-button";
 import ServiceCard from "@/components/service-card";
 import Onboarding, { OnboardingResetButton } from "@/components/onboarding";
 import type { ServiceHealth } from "@/lib/api";
@@ -62,7 +63,7 @@ const services: Omit<ServiceHealth, "status">[] = [
   {
     name: "AI Gateway",
     url: "/api/health/ai-gateway",
-    port: 5001,
+    port: 5000,
     description: "MLflow AI Gateway (optional service)",
   },
 ];
@@ -281,8 +282,11 @@ Delta Sharing (external sharing, port 8443 — optional)`}
         <p className="eyebrow">Shortcuts</p>
         <h2 className="mb-4 text-lg font-semibold text-white">Quick Access</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <JupyterLaunchButton className="card group flex items-center justify-between transition-colors hover:border-accent/30 text-left">
+            <span className="text-sm text-slate-300 group-hover:text-white">Jupyter Notebook</span>
+            <span className="font-mono text-[11px] text-slate-500">:8889</span>
+          </JupyterLaunchButton>
           {[
-            { label: "Jupyter Notebook", url: "http://localhost:8889", port: 8889 },
             { label: "Spark UI", url: "http://localhost:8082", port: 8082 },
             { label: "MLflow UI", url: "http://localhost:5000", port: 5000 },
             { label: "Unity Catalog API", url: "http://localhost:8081/api/2.1/unity-catalog/catalogs", port: 8081 },
