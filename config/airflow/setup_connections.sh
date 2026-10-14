@@ -10,23 +10,23 @@ echo "Setting up Airflow connections..."
 airflow connections delete kafka_default 2>/dev/null || true
 airflow connections add kafka_default \
     --conn-type kafka \
-    --conn-extra '{"bootstrap.servers": "localhost:9092", "group.id": "airflow-consumer", "security.protocol": "PLAINTEXT"}'
+    --conn-extra '{"bootstrap.servers": "kafka:9092", "group.id": "airflow-consumer", "security.protocol": "PLAINTEXT"}'
 echo "✓ Kafka connection configured"
 
 # Spark 4.1 (the only Spark in this repo)
 airflow connections delete spark_local 2>/dev/null || true
 airflow connections add spark_local \
     --conn-type spark \
-    --conn-host "spark://localhost" \
+    --conn-host "spark://spark-master-41" \
     --conn-port 7078 \
     --conn-extra '{"deploy_mode": "client", "spark_home": "/opt/spark"}'
 echo "✓ Spark 4.1 connection configured (spark_local)"
 
-# PostgreSQL — system PostgreSQL hosting the Unity Catalog metastore
+# PostgreSQL on the Compose network
 airflow connections delete postgres_default 2>/dev/null || true
 airflow connections add postgres_default \
     --conn-type postgres \
-    --conn-host localhost \
+    --conn-host postgres \
     --conn-port 5432 \
     --conn-login "${POSTGRES_USER:-postgres}" \
     --conn-password "${POSTGRES_PASSWORD:-}" \
@@ -37,8 +37,8 @@ echo "✓ PostgreSQL connection configured (postgres_default)"
 airflow connections delete unity_catalog 2>/dev/null || true
 airflow connections add unity_catalog \
     --conn-type http \
-    --conn-host localhost \
-    --conn-port 8081 \
+    --conn-host unity-catalog \
+    --conn-port 8080 \
     --conn-schema http
 echo "✓ Unity Catalog connection configured (unity_catalog)"
 
@@ -46,15 +46,15 @@ echo "✓ Unity Catalog connection configured (unity_catalog)"
 airflow connections delete mlflow 2>/dev/null || true
 airflow connections add mlflow \
     --conn-type http \
-    --conn-host localhost \
+    --conn-host mlflow-server \
     --conn-port 5000 \
     --conn-schema http
 echo "✓ MLflow connection configured (mlflow)"
 
 # Default Airflow variables
 airflow variables set spark_version "4.1"
-airflow variables set kafka_bootstrap_servers "localhost:9092"
-airflow variables set uc_endpoint "http://localhost:8081/api/2.1/unity-catalog/iceberg"
+airflow variables set kafka_bootstrap_servers "kafka:9092"
+airflow variables set uc_endpoint "http://unity-catalog:8080/api/2.1/unity-catalog/iceberg"
 echo "✓ Variables configured"
 
 echo ""
