@@ -61,13 +61,18 @@ Optional services not shown: MLflow Tracking + AI Gateway (`:5000`/`:5001`), Air
 git clone https://github.com/open-lakehouse/open-lakehouse
 cd open-lakehouse
 
-cp .env.example .env       # fill in POSTGRES_*, S3_* placeholders
-./lakehouse setup          # validate env, install deps, download ~860MB of JARs
+./lakehouse setup --credentials-only  # generate private credentials/configs (Docker running)
+./lakehouse start storage             # start PostgreSQL + SeaweedFS first
+./lakehouse setup                     # install deps, download ~860MB of JARs
 ./lakehouse start all      # Spark 4.1 master + worker + Connect server + Kafka
 ./lakehouse start unity-catalog
 ./lakehouse start mlflow
 ./lakehouse status --json  # confirm healthy (incl. spark.connect_grpc_listening)
 ```
+
+Setup preserves existing credentials and aligns the private Spark and Unity Catalog
+configuration. See [automatic local credentials](docs/guides/local-credentials.md)
+for recovery and dashboard/Jupyter behavior.
 
 Connect from any Python:
 

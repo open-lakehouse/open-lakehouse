@@ -12,20 +12,22 @@ test -x ./lakehouse        # CLI must be executable
 
 If Docker is not reachable: ask the user to start Docker Desktop / `systemctl start docker`. Do not proceed.
 
-## Step 1 — env + config (30s)
+## Step 1 — private credentials, storage and config
 
 ```bash
+./lakehouse setup --credentials-only
+./lakehouse start storage
 ./lakehouse setup
 ```
 
 Expected: `Setup complete!` at the bottom. The first run will:
-1. Copy `.env.example` → `.env` if missing (user must then fill credentials)
-2. Copy `config/spark/spark-defaults.conf.example` → `spark-defaults.conf`
+1. Generate missing local credentials in private `.env` (preserve existing values)
+2. Align private Spark and Unity Catalog S3 credentials, then start Compose storage
 3. Download ~860MB of JARs into `jars/` (idempotent — uses checksum verify)
 4. `poetry install`
 5. Probe disk space and port conflicts
 
-**Failure branch — placeholder credentials**: setup prints `POSTGRES_USER still has default value`. Tell the user to edit `.env`, set `POSTGRES_USER`, `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` to real values, then re-run. Do **not** try to invent values.
+**Failure branch — credential recovery**: setup identifies a missing persistent key or conflicting S3 configuration. Restore the original value from a private backup and re-run; do not rotate credentials or remove volumes to bypass the error. See [automatic local credentials](../../../docs/guides/local-credentials.md). Explicit environment files and overlays bypass the local bootstrap.
 
 **Failure branch — JAR download fails**: typically transient network. Re-run `./lakehouse setup`. If three retries fail, run `bash scripts/tools/download-jars.sh` directly and read the error.
 
@@ -50,7 +52,7 @@ Expected: `All preflight checks passed`. This verifies PostgreSQL is reachable, 
 
 `start all` now brings up the **Spark Connect server** (container `spark-connect-41`, gRPC on port 15002) alongside the master and worker. First start pulls `spark-connect_2.13:4.1.0` from Maven on the connect container — that adds ~30s. Subsequent starts hit the local Ivy cache.
 
-Order matters: Spark and Kafka can start in parallel; Unity Catalog should be up before any Spark job that talks to the catalog; Airflow depends on Postgres which is external (system PostgreSQL on port 5432).
+Order matters: Spark and Kafka can start in parallel; Unity Catalog should be up before any Spark job that talks to the catalog; Airflow depends on PostgreSQL, started with the Compose storage services in step 1.
 
 The CLI exports `LAKEHOUSE_SPARK_REMOTE=sc://localhost:15002` and `LAKEHOUSE_SPARK_MODE=connect`. Demos should read these instead of hardcoding the endpoint.
 

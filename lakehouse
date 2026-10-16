@@ -780,6 +780,11 @@ cmd_start() {
         return 1
     fi
 
+    # Prepare template credentials before storage creates persistent state.
+    case "$service" in
+        storage|all) ensure_local_credentials || return 1 ;;
+    esac
+
     # Check port availability before starting
     if ! check_ports_for_service "$service"; then
         echo -e "\n${RED}Aborting start due to port conflicts.${NC}"
@@ -1422,8 +1427,28 @@ cmd_migrate() {
     fi
 }
 
+# Initialize credentials only on the default local path; overlays own their env.
+ensure_local_credentials() {
+    if [ "$OVERLAY_ACTIVE" = true ] || [ -n "${LAKEHOUSE_ENV_FILE:-}" ]; then
+        return 0
+    fi
+    python3 "$PROJECT_ROOT/scripts/tools/configure-local-credentials.py" --root "$PROJECT_ROOT" || return 1
+    set -a
+    # shellcheck disable=SC1090
+    source "$PROJECT_ROOT/.env"
+    set +a
+}
+
 # Setup command - validates and configures everything
 cmd_setup() {
+    if [ "${1:-}" = "--credentials-only" ]; then
+        ensure_local_credentials
+        return
+    fi
+    if [ "$#" -gt 0 ]; then
+        echo "Usage: lakehouse setup [--credentials-only]" >&2
+        return 1
+    fi
     header "LAKEHOUSE SETUP"
     local has_errors=0
 
@@ -1450,48 +1475,12 @@ cmd_setup() {
         echo -e "${GREEN}✓ All required tools installed${NC}"
     fi
 
-    # Step 2: Check .env file
-    echo -e "\n${YELLOW}2. Checking configuration files...${NC}"
-    if [ ! -f "$PROJECT_ROOT/.env" ]; then
-        if [ -f "$PROJECT_ROOT/.env.example" ]; then
-            cp "$PROJECT_ROOT/.env.example" "$PROJECT_ROOT/.env"
-            echo -e "${YELLOW}!${NC} Created .env from .env.example"
-            echo -e "  ${YELLOW}→ Please edit .env with your credentials${NC}"
-            has_errors=1
-        else
-            echo -e "${RED}✗${NC} Missing .env and .env.example"
-            has_errors=1
-        fi
-    else
-        echo -e "${GREEN}✓${NC} .env exists"
-        # Validate required variables
-        source "$PROJECT_ROOT/.env"
-        local env_ok=1
-        [ -z "$POSTGRES_USER" ] && echo -e "  ${RED}✗${NC} POSTGRES_USER not set" && env_ok=0
-        [ -z "$S3_ACCESS_KEY" ] && echo -e "  ${RED}✗${NC} S3_ACCESS_KEY not set" && env_ok=0
-        [ "$POSTGRES_USER" = "your_username" ] && echo -e "  ${YELLOW}!${NC} POSTGRES_USER still has default value" && env_ok=0
-        [ "$S3_ACCESS_KEY" = "your_access_key_here" ] && echo -e "  ${YELLOW}!${NC} S3_ACCESS_KEY still has default value" && env_ok=0
-        [ $env_ok -eq 1 ] && echo -e "  ${GREEN}✓${NC} Required variables set"
-    fi
+    # Step 2: Create private credentials and align generated service configs.
+    echo -e "\n${YELLOW}2. Preparing local credentials and configuration...${NC}"
+    ensure_local_credentials || return 1
+    check_credential_consistency || return 1
 
-    # Step 3: Check Spark config
-    if [ ! -f "$PROJECT_ROOT/config/spark/spark-defaults.conf" ]; then
-        if [ -f "$PROJECT_ROOT/config/spark/spark-defaults.conf.example" ]; then
-            cp "$PROJECT_ROOT/config/spark/spark-defaults.conf.example" "$PROJECT_ROOT/config/spark/spark-defaults.conf"
-            echo -e "${YELLOW}!${NC} Created spark-defaults.conf from example"
-            echo -e "  ${YELLOW}→ Please edit with your S3/PostgreSQL credentials${NC}"
-            has_errors=1
-        else
-            echo -e "${RED}✗${NC} Missing spark-defaults.conf"
-            has_errors=1
-        fi
-    else
-        echo -e "${GREEN}✓${NC} spark-defaults.conf exists"
-        # Validate credential consistency
-        check_credential_consistency
-    fi
-
-    # Step 4: Check JARs
+    # Step 3: Check JARs
     echo -e "\n${YELLOW}3. Checking JAR dependencies...${NC}"
     local jars_dir="$PROJECT_ROOT/jars"
     local required_jars=(
@@ -1527,7 +1516,7 @@ cmd_setup() {
         fi
     fi
 
-    # Step 5: Install Python dependencies
+    # Step 4: Install Python dependencies
     echo -e "\n${YELLOW}4. Installing Python dependencies...${NC}"
     if check_cmd poetry; then
         poetry install --quiet && echo -e "${GREEN}✓${NC} Python dependencies installed" || {
@@ -1536,7 +1525,7 @@ cmd_setup() {
         }
     fi
 
-    # Step 6: Setup PostgreSQL database
+    # Step 5: Setup PostgreSQL database
     echo -e "\n${YELLOW}5. Setting up PostgreSQL database...${NC}"
     if check_cmd psql && [ -n "$POSTGRES_USER" ] && [ "$POSTGRES_USER" != "your_username" ]; then
         setup_postgres || has_errors=1
@@ -1544,7 +1533,7 @@ cmd_setup() {
         echo -e "   ${YELLOW}!${NC} Skipping PostgreSQL setup (psql not available or credentials not configured)"
     fi
 
-    # Step 7: Check disk space
+    # Step 6: Check disk space
     echo -e "\n${YELLOW}6. Checking disk space...${NC}"
     local free_gb=$($DF_TOOL -BG "$PROJECT_ROOT" | tail -1 | awk '{print $4}' | tr -d 'G')
     if [ "$free_gb" -lt 10 ] 2>/dev/null; then
@@ -1553,7 +1542,7 @@ cmd_setup() {
         echo -e "${GREEN}✓${NC} Disk space OK (${free_gb}GB free)"
     fi
 
-    # Step 8: Check for port conflicts
+    # Step 7: Check for port conflicts
     echo -e "\n${YELLOW}7. Checking for port conflicts...${NC}"
     for port in 5432 8333 9092 2181 7078 8081 8082 8085 5000 5001; do
         if nc -z localhost $port 2>/dev/null; then
@@ -3216,6 +3205,7 @@ Spark transport:
 
 Commands:
   setup               Validate environment and install dependencies
+    --credentials-only  Prepare private local credentials/configs without downloads
   check-config        Validate .env and spark-defaults.conf consistency
   preflight           Run preflight checks before starting services
   migrate [--dry-run] Run database schema migrations
@@ -3298,7 +3288,7 @@ case ${1:-help} in
 esac
 
 case ${1:-help} in
-    setup)        cmd_setup ;;
+    setup)        cmd_setup "${@:2}" ;;
     check-config) cmd_check_config ;;
     preflight)    cmd_preflight ;;
     migrate)      cmd_migrate "${@:2}" ;;
