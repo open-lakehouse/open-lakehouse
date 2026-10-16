@@ -5,6 +5,7 @@ running containers. For live Airflow testing, the container must be started.
 """
 
 import os
+import re
 import subprocess
 
 import pytest
@@ -14,6 +15,24 @@ PROJECT_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
 DAGS_DIR = os.path.join(PROJECT_ROOT, "dags")
+
+
+def dag_sources(project_root):
+    """Validate the shipped DAG template even when the user DAG mount is empty."""
+    guide = os.path.join(project_root, "docs", "guides", "airflow.md")
+    with open(guide) as stream:
+        match = re.search(
+            r"### Basic DAG Template.*?```python\n(.*?)```", stream.read(), re.S
+        )
+    assert match, "The Airflow guide must include a compilable DAG template"
+    sources = {guide: match.group(1)}
+    for directory, _, files in os.walk(os.path.join(project_root, "dags")):
+        for filename in files:
+            if filename.endswith(".py"):
+                path = os.path.join(directory, filename)
+                with open(path) as stream:
+                    sources[path] = stream.read()
+    return sources
 
 
 @pytest.mark.integration
@@ -31,9 +50,9 @@ class TestAirflowDockerConfiguration:
             **os.environ,
             "COMPOSE_PROJECT_NAME": "test",
             "POSTGRES_USER": "test",
-            "POSTGRES_PASSWORD": "test",
+            "POSTGRES_PASSWORD": "test",  # pragma: allowlist secret - synthetic Compose fixture
             "S3_ACCESS_KEY": "test",
-            "S3_SECRET_KEY": "test",
+            "S3_SECRET_KEY": "test",  # pragma: allowlist secret - synthetic Compose fixture
             "S3_ENDPOINT": "http://localhost:8333",
             "AIRFLOW_FERNET_KEY": "test-fernet-key-for-ci",
         }
@@ -71,16 +90,18 @@ class TestAirflowDockerConfiguration:
         assert "SPARK_VERSION=4.1" in content, "Dockerfile should use Spark 4.1"
 
     def test_docker_compose_network_mode(self, project_root):
-        """Docker compose should use host network mode."""
+        """Airflow peers must use Compose bridge networking and service DNS."""
         compose_path = os.path.join(project_root, "docker-compose-airflow.yml")
         with open(compose_path) as f:
             config = yaml.safe_load(f)
 
-        # Check x-airflow-common for network_mode
         common = config.get("x-airflow-common", {})
+        assert common.get("network_mode") != "host"
+        assert "lakehouse-network" in common["networks"]
         assert (
-            common.get("network_mode") == "host"
-        ), "Airflow should use host network mode for service access"
+            "@postgres:5432/airflow"
+            in common["environment"]["AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"]
+        )
 
 
 @pytest.mark.integration
@@ -93,44 +114,24 @@ class TestAirflowDAGValidation:
         if not os.path.exists(dags_dir):
             pytest.skip("dags/ directory not present")
 
-        dag_files = [f for f in os.listdir(dags_dir) if f.endswith(".py")]
-        assert len(dag_files) > 0, "No DAG files found"
+        for path, content in dag_sources(project_root).items():
+            compile(content, path, "exec")
 
-        for dag_file in dag_files:
-            dag_path = os.path.join(dags_dir, dag_file)
-            result = subprocess.run(
-                ["python3", "-m", "py_compile", dag_path],
-                capture_output=True,
-                text=True,
-            )
-            assert (
-                result.returncode == 0
-            ), f"Syntax error in {dag_file}: {result.stderr}"
-
-    def test_medallion_pipeline_references_correct_scripts(self, project_root):
-        """Medallion pipeline DAG should reference correct script paths."""
-        dag_path = os.path.join(project_root, "dags", "lakehouse_medallion_pipeline.py")
-        with open(dag_path) as f:
-            content = f.read()
+    def test_documented_pipeline_references_correct_scripts(self, project_root):
+        """The shipped DAG template should reference the mounted pipeline path."""
+        content = next(iter(dag_sources(project_root).values()))
 
         # Should reference pipelines directory
         assert (
-            "/scripts/pipelines/" in content
+            "/scripts/pipelines" in content
         ), "DAG should reference scripts/pipelines/ directory"
 
     def test_dags_use_spark_version_variable(self, project_root):
         """DAGs should support configurable Spark version."""
-        dags_dir = os.path.join(project_root, "dags")
-        dag_files = [f for f in os.listdir(dags_dir) if f.endswith(".py")]
-
-        for dag_file in dag_files:
-            dag_path = os.path.join(dags_dir, dag_file)
-            with open(dag_path) as f:
-                content = f.read()
-
+        for path, content in dag_sources(project_root).items():
             assert (
                 "Variable.get" in content
-            ), f"{dag_file} should use Airflow Variables for configuration"
+            ), f"{path} should use Airflow Variables for configuration"
 
 
 @pytest.mark.integration

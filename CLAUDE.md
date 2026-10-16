@@ -44,14 +44,16 @@ Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Datab
 
 ```bash
 ./lakehouse setup                   # validate env, install deps, download JARs
-./lakehouse start all               # storage (PostgreSQL + SeaweedFS) FIRST, then Spark 4.1 master + worker + Connect + Kafka
+./lakehouse start all               # complete stack; storage first, dashboard last
+./lakehouse start core              # storage + Spark master/worker/Connect + Kafka/Zookeeper
 ./lakehouse start storage           # PostgreSQL + SeaweedFS (Compose services on 5432/8333)
 ./lakehouse start unity-catalog     # UC OSS REST server
 ./lakehouse start mlflow            # MLflow tracking + AI Gateway
 ./lakehouse start airflow           # Airflow scheduler + UI
 ./lakehouse status --json           # machine-readable health (incl. connect_grpc_listening)
 ./lakehouse test                    # connectivity tests, returns exit code
-./lakehouse stop all                # safe stop of Spark + Kafka (volumes preserved). NOTE: does NOT stop storage — use `./lakehouse stop storage` for that
+./lakehouse stop all                # stop complete stack in reverse dependency order; preserve volumes
+./lakehouse stop core               # stop Kafka, Spark, then storage; preserve volumes
 
 # Spark transport flags
 ./lakehouse --spark-connect start   # explicit Connect mode (same as default)

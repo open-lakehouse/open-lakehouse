@@ -101,7 +101,7 @@ class TestUnityCatalogDocumentation:
         guide = ROOT_DIR / "docs" / "guides" / "unity-catalog.md"
         content = guide.read_text()
 
-        assert "Quick Start" in content, "Should have Quick Start section"
+        assert "## Start" in content, "Should document service startup"
         assert "lakehouse start unity-catalog" in content, "Should show start command"
 
     def test_guide_has_troubleshooting(self):
@@ -138,12 +138,12 @@ class TestUnityCatalogDemoScript:
 
     def test_demo_script_exists(self):
         """Demo script should exist."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
-        assert script.exists(), "unity_catalog_demo.py not found"
+        script = ROOT_DIR / "demos" / "unity-catalog" / "uc_governance.py"
+        assert script.exists(), "uc_governance.py not found"
 
     def test_demo_script_syntax_valid(self):
         """Demo script should have valid Python syntax."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
+        script = ROOT_DIR / "demos" / "unity-catalog" / "uc_governance.py"
         result = subprocess.run(
             ["python3", "-m", "py_compile", str(script)], capture_output=True, text=True
         )
@@ -151,20 +151,22 @@ class TestUnityCatalogDemoScript:
 
     def test_demo_script_has_spark_session(self):
         """Demo script should create SparkSession."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
+        script = ROOT_DIR / "demos" / "unity-catalog" / "uc_governance.py"
         content = script.read_text()
 
         assert "SparkSession" in content, "Should use SparkSession"
-        assert "RESTCatalog" in content, "Should configure RESTCatalog"
+        assert (
+            "SparkSession.builder.remote(REMOTE)" in content
+        ), "Should use Spark Connect"
 
-    def test_demo_script_creates_medallion_schemas(self):
-        """Demo script should create medallion architecture schemas."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
+    def test_demo_script_creates_governance_schemas(self):
+        """The current governance demo should create its two isolated schemas."""
+        script = ROOT_DIR / "demos" / "unity-catalog" / "uc_governance.py"
         content = script.read_text()
 
-        assert "bronze" in content, "Should create bronze schema"
-        assert "silver" in content, "Should create silver schema"
-        assert "gold" in content, "Should create gold schema"
+        assert "unity.uc_demo_core" in content
+        assert "unity.uc_demo_analytics" in content
+        assert "CREATE SCHEMA IF NOT EXISTS" in content
 
 
 @pytest.mark.integration

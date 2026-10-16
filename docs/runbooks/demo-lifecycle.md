@@ -43,7 +43,7 @@ If anything is red, fix it before continuing. The CLI gives you specific instruc
 
 ```bash
 ./lakehouse preflight        # verify nothing's blocking us
-./lakehouse start all        # Spark 4.1 + Kafka
+./lakehouse start core       # storage + Spark 4.1 + Kafka
 ./lakehouse start unity-catalog
 ./lakehouse start mlflow
 ./lakehouse start airflow    # only if demoing orchestration

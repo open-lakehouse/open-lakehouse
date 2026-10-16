@@ -116,7 +116,7 @@ jobs:
 
       - name: Start stack (Spark + Kafka, then UC, MLflow — storage already up)
         run: |
-          ./lakehouse start all
+          ./lakehouse start core
           ./lakehouse start unity-catalog
           ./lakehouse start mlflow
 
@@ -213,4 +213,3 @@ jobs:
         # the runner is ephemeral so data is discarded with the VM anyway.
         run: |
           ./lakehouse stop all || true
-          ./lakehouse stop storage || true

@@ -71,12 +71,12 @@ class TestStorageScripts:
 
     def test_seaweedfs_test_script_exists(self):
         """SeaweedFS test script should exist."""
-        script = PROJECT_ROOT / "scripts" / "test-seaweedfs.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-seaweedfs.py"
         assert script.exists(), "test-seaweedfs.py should exist"
 
     def test_seaweedfs_script_syntax(self):
         """SeaweedFS test script should have valid Python syntax."""
-        script = PROJECT_ROOT / "scripts" / "test-seaweedfs.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-seaweedfs.py"
         if not script.exists():
             pytest.skip("test-seaweedfs.py not found")
 
@@ -89,7 +89,7 @@ class TestStorageScripts:
 
     def test_seaweedfs_script_has_required_tests(self):
         """SeaweedFS script should test key storage operations."""
-        script = PROJECT_ROOT / "scripts" / "test-seaweedfs.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-seaweedfs.py"
         if not script.exists():
             pytest.skip("test-seaweedfs.py not found")
 
@@ -131,7 +131,7 @@ class TestSeaweedFSLive:
                 "s3",
                 endpoint_url="http://localhost:8333",
                 aws_access_key_id="admin",
-                aws_secret_access_key="admin",
+                aws_secret_access_key="admin",  # pragma: allowlist secret - public legacy test default
                 config=Config(signature_version="s3v4"),
                 region_name="us-east-1",
             )

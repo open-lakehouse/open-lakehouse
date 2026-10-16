@@ -5,7 +5,7 @@ These run without Docker or Node — they read the ported dashboard source, the
 compose file, and the CLI, and assert the port contract, the env-var contract
 (U-25), the code-execution-off-by-default posture (U-26 / D6), and the
 neutrality invariants (U-38 / D8): the dashboard is a separate optional compose
-and is never started by `./lakehouse start all`.
+and is excluded from the core group; the explicit all group includes it.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 DASHBOARD = REPO / "dashboard"
@@ -109,11 +110,8 @@ def test_env_var_contract():
     ), f"env vars read in code but not in compose/runtime: {sorted(missing)}"
 
 
-def test_not_started_by_start_all():
-    """U-38 / D8 neutrality: the dashboard is opt-in. Every CLI arm that acts on
-    the dashboard compose must sit under a standalone `dashboard)` case label,
-    never a `...|all)` behavior arm — so `start all` / `stop all` never touch it.
-    (The valid-arg allowlist and usage strings may still name it alongside all.)"""
+def test_dashboard_has_dedicated_lifecycle_arms():
+    """Keep dashboard composition separate; service-group behavior is exercised separately."""
     lines = _read(CLI).splitlines()
     actions = [
         i for i, ln in enumerate(lines) if "overlay_set_compose_args dashboard" in ln
@@ -128,7 +126,7 @@ def test_not_started_by_start_all():
                 break
         assert label == "dashboard", (
             f"dashboard compose action at line {i + 1} is under case '{label}', "
-            "expected a standalone 'dashboard)' arm (not co-listed with 'all')"
+            "expected a standalone 'dashboard)' arm"
         )
 
 
@@ -136,3 +134,28 @@ def test_dashboard_is_separate_compose_not_folded_into_core():
     """The core compose files must not define the dashboard service."""
     for core in ("docker-compose-storage.yml", "docker-compose-spark41.yml"):
         assert "open-lakehouse-dashboard" not in _read(REPO / core)
+
+
+def test_dashboard_notebook_port_matches_notebook_server():
+    dashboard = yaml.safe_load(_read(COMPOSE))["services"]["dashboard"]
+    notebooks = yaml.safe_load(_read(REPO / "docker-compose-notebooks.yml"))
+    port_mapping = notebooks["services"]["jupyter"]["ports"][0]
+    internal_port = port_mapping.rsplit(":", 1)[1]
+    assert dashboard["environment"]["JUPYTER_URL"] == f"http://jupyter:{internal_port}"
+
+
+def test_gateway_card_uses_tracking_server_port():
+    source = _read(DASHBOARD / "src/app/page.tsx")
+    card = re.search(r'\{[^{}]*name: "AI Gateway"[^{}]*\}', source)
+    assert card, "AI Gateway service card missing"
+    assert re.search(r"port: 5000\b", card.group())
+
+
+def test_notebook_route_defaults_match_server_port():
+    for rel in (
+        "src/app/api/jupyter/[...path]/route.ts",
+        "src/app/api/jupyter-exec/route.ts",
+        "src/app/api/pipelines/run/route.ts",
+    ):
+        source = _read(DASHBOARD / rel)
+        assert 'process.env.JUPYTER_URL || "http://jupyter:8889"' in source, rel

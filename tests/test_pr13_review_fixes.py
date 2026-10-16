@@ -432,12 +432,12 @@ class TestNotebooksLifecycle:
             r"notebooks\|[\w|-]*all\]", body
         ), "the start usage string should list notebooks"
 
-    def test_start_notebooks_is_optin_not_in_all(self):
+    def test_start_notebooks_has_independent_lifecycle_arm(self):
         body = self._body("cmd_start")
-        # notebooks must NOT be bundled into a `start all` case arm (opt-in only).
+        # Groups delegate to the individual notebook arm; no duplicated compose action.
         assert (
             "notebooks|all)" not in body and "all|notebooks)" not in body
-        ), "notebooks must be opt-in, not part of `start all`"
+        ), "notebooks must retain an individual lifecycle arm"
 
     def test_reset_running_services_probes_jupyter(self):
         body = self._body("reset_running_services")

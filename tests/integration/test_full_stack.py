@@ -21,12 +21,12 @@ class TestFullStackScripts:
 
     def test_full_stack_script_exists(self):
         """Full stack test script should exist."""
-        script = PROJECT_ROOT / "scripts" / "test-full-stack.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-full-stack.py"
         assert script.exists(), "test-full-stack.py should exist"
 
     def test_full_stack_script_syntax(self):
         """Full stack test script should have valid Python syntax."""
-        script = PROJECT_ROOT / "scripts" / "test-full-stack.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-full-stack.py"
         if not script.exists():
             pytest.skip("test-full-stack.py not found")
 
@@ -37,7 +37,7 @@ class TestFullStackScripts:
 
     def test_full_stack_script_tests_all_services(self):
         """Full stack script should test all 5 services."""
-        script = PROJECT_ROOT / "scripts" / "test-full-stack.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-full-stack.py"
         if not script.exists():
             pytest.skip("test-full-stack.py not found")
 
@@ -61,12 +61,12 @@ class TestStreamingScripts:
 
     def test_streaming_script_exists(self):
         """Streaming test script should exist."""
-        script = PROJECT_ROOT / "scripts" / "test-streaming-iceberg.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-streaming-iceberg.py"
         assert script.exists(), "test-streaming-iceberg.py should exist"
 
     def test_streaming_script_syntax(self):
         """Streaming test script should have valid Python syntax."""
-        script = PROJECT_ROOT / "scripts" / "test-streaming-iceberg.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-streaming-iceberg.py"
         if not script.exists():
             pytest.skip("test-streaming-iceberg.py not found")
 
@@ -77,7 +77,7 @@ class TestStreamingScripts:
 
     def test_streaming_script_uses_structured_streaming(self):
         """Streaming script should use Spark Structured Streaming."""
-        script = PROJECT_ROOT / "scripts" / "test-streaming-iceberg.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-streaming-iceberg.py"
         if not script.exists():
             pytest.skip("test-streaming-iceberg.py not found")
 
@@ -93,7 +93,7 @@ class TestMedallionArchitecture:
 
     def test_full_stack_has_medallion_layers(self):
         """Full stack script should implement medallion architecture."""
-        script = PROJECT_ROOT / "scripts" / "test-full-stack.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-full-stack.py"
         if not script.exists():
             pytest.skip("test-full-stack.py not found")
 
@@ -105,7 +105,7 @@ class TestMedallionArchitecture:
 
     def test_transformations_between_layers(self):
         """Should have transformations between medallion layers."""
-        script = PROJECT_ROOT / "scripts" / "test-full-stack.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-full-stack.py"
         if not script.exists():
             pytest.skip("test-full-stack.py not found")
 
@@ -132,7 +132,7 @@ class TestDataConsistency:
 
     def test_full_stack_verifies_consistency(self):
         """Full stack script should verify data consistency."""
-        script = PROJECT_ROOT / "scripts" / "test-full-stack.py"
+        script = PROJECT_ROOT / "scripts" / "connectivity" / "test-full-stack.py"
         if not script.exists():
             pytest.skip("test-full-stack.py not found")
 
@@ -200,7 +200,7 @@ class TestFullStackLive:
                 port=5432,
                 database="iceberg_catalog",
                 user="iceberg",
-                password="iceberg",
+                password="iceberg",  # pragma: allowlist secret - public legacy test default
             )
             cursor = conn.cursor()
             cursor.execute("SELECT 1")

@@ -33,24 +33,30 @@ Validate environment, install Python deps via Poetry, download JARs (~860 MB int
 
 ```bash
 ./lakehouse setup
+./lakehouse setup --credentials-only  # private credentials/configs only
 ```
 
 Runs the following steps and reports each:
 
 1. Check prerequisites (Docker, Poetry, psql, jq, nc, curl)
-2. Validate `.env` against `.env.example`
-3. Copy `config/spark/spark-defaults.conf.example` → `spark-defaults.conf` if missing
+2. Prepare private credentials and recover existing values without rotating them
+3. Align Spark and Unity Catalog S3 configuration; stop on conflicting values
 4. Download/verify JARs
 5. `poetry install --quiet`
 6. Create local `iceberg_catalog` database if `psql` is available
 7. Check disk space and port conflicts
+
+`--credentials-only` requires Python and a reachable Docker daemon, then prepares
+the private configuration without downloading dependencies or starting services.
+See [credential recovery](local-credentials.md) before changing existing secrets.
 
 ### `start [service]`
 
 Start one of the services or all of them.
 
 ```bash
-./lakehouse start all              # Spark 4.1 master + worker + Connect + Kafka
+./lakehouse start all              # complete stack, storage first and dashboard last
+./lakehouse start core             # storage + Spark master/worker/Connect + Kafka/Zookeeper
 ./lakehouse start unity-catalog
 ./lakehouse start mlflow
 ./lakehouse start airflow
@@ -58,24 +64,39 @@ Start one of the services or all of them.
 ./lakehouse start kafka            # Kafka only
 ```
 
-`all` includes the Spark Connect server but does NOT include Unity Catalog, MLflow, or Airflow — start those individually.
+`all` (also the default for bare `start`) starts storage, Spark, Kafka, Unity Catalog,
+MLflow, Airflow, notebooks, Delta Sharing and dashboard, in that order. `core`
+starts storage, Spark and Kafka only. Individual service commands remain available,
+including `start sharing` as an alias for `share start`. A failed build, startup or
+readiness check stops the group and returns a failure; earlier services remain
+running so the failure can be inspected and the command retried. Dashboard code
+execution stays disabled unless explicitly configured.
+
+Unity Catalog and MLflow HTTP readiness checks reject error responses. Delta
+Sharing readiness checks its authenticated shares API before publishing the
+client profile. Profile writes are atomic and owner-only; a failed write keeps
+the previous profile and fails startup.
 
 ### `stop [service]`
 
-Stop a service (preserves named volumes — data is safe).
+Stop a service or group (preserves named volumes — data is safe). `all` and `core`
+stop the same members they start, in reverse order with storage last. If a stop
+fails, dependencies stay running. `stop core` includes storage; it does not stop
+services outside the core group.
 
 ```bash
 ./lakehouse stop all
-./lakehouse stop unity-catalog
-./lakehouse stop mlflow
+./lakehouse stop core
 ./lakehouse stop airflow
 ```
 
-For destructive teardown, use `docker compose -f <file> down -v` manually after confirming you accept data loss.
+Use `./lakehouse reset --all --dry-run` to review a destructive reset; ordinary stop
+and restart never delete named volumes.
 
 ### `restart [service]`
 
-Equivalent to `stop` + 2s sleep + `start`. Use for config changes that need a fresh container.
+Equivalent to `stop` + 2s sleep + `start`, using the same service or group on both
+sides. Use for config changes that need a fresh container.
 
 ### `status [--json]`
 
@@ -209,13 +230,9 @@ cat demos/streaming-kafka-to-iceberg/README.md      # follow Run section
 
 # Daily stop
 ./lakehouse stop all
-./lakehouse stop unity-catalog
 
-# Full reset (destructive)
-./lakehouse stop all
-docker compose -f docker-compose-unity-catalog.yml down -v
-docker compose -f docker-compose-mlflow.yml down -v
-docker compose -f docker-compose-airflow.yml down -v
+# Preview a full reset before confirming it
+./lakehouse reset --all --dry-run
 ```
 
 ## For AI agents

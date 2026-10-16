@@ -1,6 +1,6 @@
 ---
 name: lakehouse-lifecycle
-description: Use when starting, stopping, demoing, or troubleshooting the open-lakehouse stack (Spark 4.1, Kafka, Airflow, Unity Catalog, MLflow). Provides deterministic start/stop/demo runbooks an AI agent can execute top-to-bottom.
+description: Use when starting, stopping, demoing, or troubleshooting the open-lakehouse stack (Spark 4.1, Kafka, Airflow, Unity Catalog, MLflow). Provides complete/core service groups, dependency-aware runbooks, private local credential bootstrap and safe recovery for existing installations.
 ---
 
 # Lakehouse lifecycle

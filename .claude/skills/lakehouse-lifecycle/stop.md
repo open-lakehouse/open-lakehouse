@@ -5,18 +5,16 @@ Goal: bring everything down cleanly, and know exactly what survives.
 ## Default — quick stop (preserves what is on a mounted volume)
 
 ```bash
-./lakehouse stop all            # Spark + Kafka ONLY
-./lakehouse stop storage        # PostgreSQL + SeaweedFS (NOT included in `stop all`)
-./lakehouse stop unity-catalog
-./lakehouse stop airflow
-./lakehouse stop mlflow
+./lakehouse stop all            # complete stack, storage last; data preserved
 ```
 
-> **Asymmetry to know:** `./lakehouse start all` brings storage up first, but
-> `./lakehouse stop all` stops only Spark + Kafka — it deliberately leaves the
-> storage services (and their volumes) running so a subsequent `start` inherits a
-> warm metastore/object store. Stop storage explicitly with `./lakehouse stop
-> storage` when you want it down.
+Use `./lakehouse stop core` to stop Kafka, Spark and storage only. Services outside
+that group are not stopped. Individual `stop <service>` commands remain available,
+including `stop sharing` (also available as `share stop`).
+
+Groups stop in reverse startup order. If a service fails to stop, the command
+returns a failure and leaves its dependencies running. `restart all` / `restart
+core` stop and restart the same group.
 
 This runs `docker compose down` for each compose file. Containers are removed but
 **all persistent state survives a restart**, because it lives in named volumes and

@@ -12,20 +12,22 @@ test -x ./lakehouse        # CLI must be executable
 
 If Docker is not reachable: ask the user to start Docker Desktop / `systemctl start docker`. Do not proceed.
 
-## Step 1 — env + config (30s)
+## Step 1 — private credentials, storage and config
 
 ```bash
+./lakehouse setup --credentials-only
+./lakehouse start storage
 ./lakehouse setup
 ```
 
 Expected: `Setup complete!` at the bottom. The first run will:
-1. Copy `.env.example` → `.env` if missing (user must then fill credentials)
-2. Copy `config/spark/spark-defaults.conf.example` → `spark-defaults.conf`
+1. Generate missing local credentials in private `.env` (preserve existing values)
+2. Align private Spark and Unity Catalog S3 credentials, then start Compose storage
 3. Download ~860MB of JARs into `jars/` (idempotent — uses checksum verify)
 4. `poetry install`
 5. Probe disk space and port conflicts
 
-**Failure branch — placeholder credentials**: setup prints `POSTGRES_USER still has default value`. Tell the user to edit `.env`, set `POSTGRES_USER`, `POSTGRES_PASSWORD`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` to real values, then re-run. Do **not** try to invent values.
+**Failure branch — credential recovery**: setup identifies a missing persistent key or conflicting S3 configuration. Restore the original value from a private backup and re-run; do not rotate credentials or remove volumes to bypass the error. See [automatic local credentials](../../../docs/guides/local-credentials.md). Explicit environment files and overlays bypass the local bootstrap.
 
 **Failure branch — JAR download fails**: typically transient network. Re-run `./lakehouse setup`. If three retries fail, run `bash scripts/tools/download-jars.sh` directly and read the error.
 
@@ -39,18 +41,22 @@ Expected: `All preflight checks passed`. This verifies PostgreSQL is reachable, 
 
 **Failure branch — port already in use**: read which port. If it's our container from a previous run (`docker ps`), preflight already accepts it. If it's a foreign process, ask the user to free the port before continuing.
 
-## Step 3 — core services (90–120s with first-run package downloads)
+## Step 3 — start services (first builds can take several minutes)
 
 ```bash
-./lakehouse start all          # Spark 4.1 master + worker + Connect server + Kafka
-./lakehouse start unity-catalog
-./lakehouse start mlflow
-./lakehouse start airflow      # optional, only if demoing orchestration
+./lakehouse start all          # complete stack, including Airflow, notebooks and dashboard
 ```
 
-`start all` now brings up the **Spark Connect server** (container `spark-connect-41`, gRPC on port 15002) alongside the master and worker. First start pulls `spark-connect_2.13:4.1.0` from Maven on the connect container — that adds ~30s. Subsequent starts hit the local Ivy cache.
+`start all` starts storage, Spark, Kafka, Unity Catalog, MLflow, Airflow, notebooks,
+Delta Sharing and dashboard in dependency order. Use `./lakehouse start core` for
+storage, Spark and Kafka only, then start any other services individually. Both
+groups include the **Spark Connect server** (container `spark-connect-41`, gRPC
+on port 15002) alongside the master and worker. First start pulls `spark-connect_2.13:4.1.0` from Maven on the connect container — that adds ~30s. Subsequent starts hit the local Ivy cache.
 
-Order matters: Spark and Kafka can start in parallel; Unity Catalog should be up before any Spark job that talks to the catalog; Airflow depends on Postgres which is external (system PostgreSQL on port 5432).
+A failed start/readiness check stops the group; inspect the reported service and
+retry after correcting it. Earlier services remain running. Startup does not
+seed demo tables or enable dashboard code execution.
+
 
 The CLI exports `LAKEHOUSE_SPARK_REMOTE=sc://localhost:15002` and `LAKEHOUSE_SPARK_MODE=connect`. Demos should read these instead of hardcoding the endpoint.
 
@@ -78,7 +84,8 @@ Writes one row to `iceberg.bronze._smoke`, reads it back, drops the table. If th
 
 ## What "started" looks like
 
-A healthy `./lakehouse status` shows green checks for: PostgreSQL, SeaweedFS, Unity Catalog REST, `spark-master-41`, `spark-worker-41`, `spark-connect-41` (gRPC listening on 15002), `kafka`, `zookeeper`, and (if started) airflow + mlflow.
+A healthy `./lakehouse status` shows green checks for: PostgreSQL, SeaweedFS, Unity Catalog REST, `spark-master-41`, `spark-worker-41`, `spark-connect-41` (gRPC listening on 15002), `kafka`, `zookeeper`, Airflow, MLflow, Delta Sharing and dashboard after a complete start. Jupyter is
+checked during startup and can also be opened on port 8889.
 
 ## After start
 

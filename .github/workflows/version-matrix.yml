@@ -97,7 +97,7 @@ jobs:
         run: bash scripts/tools/swap-delta-version.sh "${{ matrix.delta }}"
 
       - name: Bring up Spark (reads the swapped live conf — storage already up)
-        run: ./lakehouse start all
+        run: ./lakehouse start core
 
       - name: Readiness gate (spark-master must be up — a down master is a failure)
         run: |
@@ -139,4 +139,3 @@ jobs:
         if: always()
         run: |
           ./lakehouse stop all || true
-          ./lakehouse stop storage || true

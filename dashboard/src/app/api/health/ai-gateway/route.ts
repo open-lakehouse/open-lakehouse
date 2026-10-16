@@ -3,13 +3,12 @@
 
 import { NextResponse } from "next/server";
 
-// Liveness probe for the MLflow AI Gateway (deployments server) on the bridge.
-// Optional service; returns "unknown" when it isn't running.
-const AI_GATEWAY_HEALTH = "http://mlflow-server:5001/health";
-
+// MLflow 3.14 serves the AI Gateway API in the tracking server.
+// Probe its endpoint registry so the gateway API and database are both checked.
 export async function GET() {
   try {
-    const res = await fetch(AI_GATEWAY_HEALTH, { signal: AbortSignal.timeout(3000) });
+    const baseUrl = process.env.MLFLOW_URL || "http://mlflow-server:5000";
+    const res = await fetch(`${baseUrl}/api/3.0/mlflow/gateway/endpoints/list`, { signal: AbortSignal.timeout(3000) });
     return NextResponse.json(
       { status: res.ok ? "healthy" : "unhealthy" },
       { status: res.ok ? 200 : 503 }

@@ -764,7 +764,7 @@ class TestU62ArtifactFreeRunsUnflagged:
 
 class TestSharingQuiescedOnReset:
     """Delta Sharing reads warehouse/sharing/, so reset must quiesce it (and
-    restart it via share_restore), while never entering `start all` / `stop all`."""
+    restart it via share_restore) independently of the service-group commands."""
 
     def test_running_set_includes_sharing(self):
         body = _func_body("reset_running_services")
@@ -784,21 +784,16 @@ class TestSharingQuiescedOnReset:
     def test_cmd_stop_has_sharing_arm(self):
         assert "sharing)" in _func_body("cmd_stop")
 
-    def test_start_has_no_sharing_arm(self):
-        # sharing is not startable via the CLI dispatch (restore uses share_restore),
-        # so `start all` / `start sharing` never bring it up.
-        assert "sharing)" not in _func_body("cmd_start")
+    def test_start_sharing_reuses_profile_aware_interface(self):
+        body = _func_body("cmd_start")
+        assert "sharing)" in body
+        assert "cmd_share start || return 1" in body
 
-    def test_sharing_not_in_stop_all_validset(self):
+    def test_sharing_stop_preserves_volumes(self):
         body = _func_body("cmd_stop")
-        # The shared valid-set (the no-op arm that lets `stop all` fall through)
-        # still lists the core services. Match on the core run rather than a
-        # trailing token so this survives other opt-in services being appended
-        # to the alternation (e.g. dashboard).
-        assert "mlflow|notebooks" in body  # shared valid-set core intact
-        # sharing is a standalone early-return arm, never folded into a stop-all
-        # alternation — so it must never appear joined by a pipe anywhere.
-        assert "|sharing" not in body  # not appended to stop-all
+        segment = body.split("sharing)", 1)[1].split(";;", 1)[0]
+        assert "overlay_set_compose_args sharing" in segment
+        assert "down -v" not in segment and "--volumes" not in segment
 
     def test_certs_volume_still_never(self):
         body = _func_body("reset_volume_mode")
