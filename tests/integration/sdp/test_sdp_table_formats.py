@@ -385,10 +385,14 @@ class TestI45CatalogManagedDelta:
             timeout=300,
         ).stdout
         # The table's UC storage_location must be catalog-assigned (under __unitystorage).
+        # Look it up before asserting on the Spark output, but never let a 404
+        # (table never created because spark-submit failed) mask that output.
         loc = ""
         try:
             with _url.urlopen(f"{_UC}/tables/{cat}.{sch}.{tbl}", timeout=8) as r:
                 loc = _json.loads(r.read()).get("storage_location", "")
+        except _url.HTTPError:
+            pass
         finally:
             try:
                 _url.urlopen(

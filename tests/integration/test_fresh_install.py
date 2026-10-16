@@ -269,12 +269,14 @@ class TestEndToEndSetup:
         host = postgres_container.get_container_host_ip()
         port = postgres_container.get_exposed_port(5432)
 
+        # The container is provisioned by conftest.postgres_container (uc/uc,
+        # unity_catalog); use its credentials rather than a fixed pair.
         conn = psycopg2.connect(
             host=host,
             port=port,
-            user="iceberg",
-            password="iceberg",
-            database="iceberg_catalog",
+            user=postgres_container.username,
+            password=postgres_container.password,
+            database=postgres_container.dbname,
         )
 
         cursor = conn.cursor()

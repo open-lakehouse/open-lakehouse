@@ -127,15 +127,52 @@ def kafka_bootstrap_servers(kafka_container) -> str:
     return kafka_container.get_bootstrap_server()
 
 
+# Jars the local (in-process) SparkSession needs, taken from the repo's jars/
+# directory that scripts/tools/download-jars.sh populates (the same pinned set
+# the containers mount at /opt/spark/jars-extra). Globbed so a pin bump in
+# download-jars.sh does not have to be mirrored here.
+_LOCAL_JAR_GLOBS = {
+    "iceberg": "iceberg-spark-runtime-*.jar",
+    "kafka": "spark-sql-kafka-0-10_*.jar",
+    "kafka-token": "spark-token-provider-kafka-0-10_*.jar",
+    "kafka-clients": "kafka-clients-*.jar",
+    "commons-pool2": "commons-pool2-*.jar",
+}
+
+
 @pytest.fixture(scope="session")
-def spark_local(clean_warehouse_session):
+def local_jars(project_root) -> dict:
+    """Map of role -> absolute jar path for every pinned jar present in jars/."""
+    import glob
+
+    found = {}
+    for role, pattern in _LOCAL_JAR_GLOBS.items():
+        matches = sorted(glob.glob(os.path.join(project_root, "jars", pattern)))
+        if matches:
+            found[role] = matches[-1]
+    return found
+
+
+@pytest.fixture(scope="session")
+def spark_local(clean_warehouse_session, local_jars):
     """SparkSession with a hadoop (filesystem) Iceberg catalog.
 
     No JDBC, no UC server required. Use for table-format and SQL-level tests
     that don't need a real catalog service. Tests requiring UC OSS itself
     should check for a live UC endpoint and skip otherwise.
+
+    The Iceberg runtime (and the Kafka connector, when present) come from the
+    repo's jars/ directory. SparkSession.getOrCreate() reuses one JVM per
+    pytest process, so every test that needs a connector must get it from
+    THIS session: a second builder with its own spark.jars.packages silently
+    returns this session without the extra packages.
     """
     from pyspark.sql import SparkSession
+
+    if "iceberg" not in local_jars:
+        pytest.skip(
+            "iceberg-spark-runtime jar not in jars/ (run scripts/tools/download-jars.sh)"
+        )
 
     spark = (
         SparkSession.builder.appName("open-lakehouse-tests")
@@ -143,6 +180,7 @@ def spark_local(clean_warehouse_session):
         .config("spark.driver.memory", "1g")
         .config("spark.sql.shuffle.partitions", "2")
         .config("spark.ui.enabled", "false")
+        .config("spark.jars", ",".join(local_jars.values()))
         .config(
             "spark.sql.extensions",
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
