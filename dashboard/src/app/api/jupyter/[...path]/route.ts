@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireEnv } from "@/lib/env";
 import { codeExecutionEnabled, codeExecutionDisabledResponse } from "@/lib/features";
 
-const JUPYTER_URL = () => process.env.JUPYTER_URL || "http://jupyter:8888";
+const JUPYTER_URL = () => process.env.JUPYTER_URL || "http://jupyter:8889";
 const JUPYTER_TOKEN = () => requireEnv("JUPYTER_TOKEN");
 
 function validatePath(path: string[]): NextResponse | null {
