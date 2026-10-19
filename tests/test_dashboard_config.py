@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parents[1]
 DASHBOARD = REPO / "dashboard"
@@ -136,3 +137,28 @@ def test_dashboard_is_separate_compose_not_folded_into_core():
     """The core compose files must not define the dashboard service."""
     for core in ("docker-compose-storage.yml", "docker-compose-spark41.yml"):
         assert "open-lakehouse-dashboard" not in _read(REPO / core)
+
+
+def test_dashboard_notebook_port_matches_notebook_server():
+    dashboard = yaml.safe_load(_read(COMPOSE))["services"]["dashboard"]
+    notebooks = yaml.safe_load(_read(REPO / "docker-compose-notebooks.yml"))
+    port_mapping = notebooks["services"]["jupyter"]["ports"][0]
+    internal_port = port_mapping.rsplit(":", 1)[1]
+    assert dashboard["environment"]["JUPYTER_URL"] == f"http://jupyter:{internal_port}"
+
+
+def test_gateway_card_uses_tracking_server_port():
+    source = _read(DASHBOARD / "src/app/page.tsx")
+    card = re.search(r'\{[^{}]*name: "AI Gateway"[^{}]*\}', source)
+    assert card, "AI Gateway service card missing"
+    assert re.search(r"port: 5000\b", card.group())
+
+
+def test_notebook_route_defaults_match_server_port():
+    for rel in (
+        "src/app/api/jupyter/[...path]/route.ts",
+        "src/app/api/jupyter-exec/route.ts",
+        "src/app/api/pipelines/run/route.ts",
+    ):
+        source = _read(DASHBOARD / rel)
+        assert 'process.env.JUPYTER_URL || "http://jupyter:8889"' in source, rel
