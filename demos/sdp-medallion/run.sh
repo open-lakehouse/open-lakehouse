@@ -11,7 +11,7 @@
 #      uses its own embedded Connect driver — spark.master + --remote conflict),
 #      after freeing port 15002 by stopping the standalone Connect server.
 #
-# Requires: Delta 4.3.1 + the UC 0.5.x connector family (see spark-defaults) and
+# Requires: Delta 4.3.1 + the UC 0.6.x connector family (see spark-defaults) and
 # `./lakehouse start all && ./lakehouse start unity-catalog`.
 #
 # Behind a firewall, export PIP_INDEX_URL=<mirror>/simple for step 3.

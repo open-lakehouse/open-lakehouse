@@ -58,8 +58,8 @@ function cleanLine(line: string): string | null {
 //
 // IMPORTANT: keep these package versions on the stack-wide pins (CLAUDE.md /
 // config/spark/spark-defaults.conf). Delta MUST be 4.3.1 — 4.3.0 NPEs through
-// the UC connector (I-02) and resolves unitycatalog-client 0.5.0 instead of the
-// required 0.5.1, so a dashboard-launched pipeline would diverge from the CLI.
+// the UC connector (I-02) and pins unitycatalog-client 0.5.0 transitively instead
+// of the required 0.6.0, so a dashboard-launched pipeline would diverge from the CLI.
 const SDP_CONF_LINES = [
   "spark.jars.packages io.delta:delta-spark_4.1_2.13:4.3.1,org.apache.hadoop:hadoop-aws:3.4.1",
   "spark.sql.extensions io.delta.sql.DeltaSparkSessionExtension",

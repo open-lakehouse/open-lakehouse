@@ -1,4 +1,4 @@
-# Unity Catalog OSS v0.5.0 — the catalog for this stack.
+# Unity Catalog OSS v0.6.0 — the catalog for this stack.
 #
 # Provides:
 # - REST API for Iceberg tables (read-only via Iceberg REST, full CRUD via UC API)
@@ -25,7 +25,7 @@
 #   - External locations API: POST /api/2.1/unity-catalog/external-locations
 #   - Storage credentials API: POST /api/2.1/unity-catalog/credentials
 #   - Managed storage on catalogs/schemas (storage_root parameter)
-#   - Iceberg writes are NOT supported on any UC OSS build (0.4.x and 0.5.0
+#   - Iceberg writes are NOT supported on any UC OSS build (0.4.x and 0.6.0
 #     alike reject data_source_format=ICEBERG) — this catalog is Delta-write /
 #     Iceberg-read-only (see CLAUDE.md, §1.12).
 
@@ -34,13 +34,12 @@ services:
     # Official, canonical UC image (PR #13 / T-1.17, D2). Replaced the earlier
     # personal pre-publish staging artifact (a personal Docker Hub namespace with
     # one v0.4.1 tag and no retention guarantee) with the canonical, versioned,
-    # retained release. The v0.5.0 win is catalog-managed
-    # Delta (delta.feature.catalogManaged), which unlocks SQL `.sql` SDP
-    # transformations. It adds NO Iceberg write support — 0.4.x and 0.5.0 both
-    # reject data_source_format=ICEBERG (measured, §1.12), so this catalog stays
-    # Delta-write / Iceberg-read-only (see CLAUDE.md). v0.5.1 is released on
-    # GitHub but has no official container yet — do not bump past 0.5.0.
-    image: unitycatalog/unitycatalog:v0.5.0
+    # retained release (v0.5.0 added catalog-managed Delta; v0.6.0 is the current
+    # pin). Catalog-managed Delta (delta.feature.catalogManaged) unlocks SQL `.sql`
+    # SDP transformations. UC adds NO Iceberg write support — 0.4.x through 0.6.0
+    # alike reject data_source_format=ICEBERG (measured, §1.12) — so this catalog
+    # stays Delta-write / Iceberg-read-only (see CLAUDE.md).
+    image: unitycatalog/unitycatalog:v0.6.0
     container_name: unity-catalog
     ports:
       - "8081:8080"      # REST API + Iceberg REST Catalog endpoint (8081 host, SeaweedFS uses 8080)
@@ -79,7 +78,7 @@ services:
   # port 3001 because the UI serves on container port 3000, which the dashboard
   # already publishes. Browse it at http://localhost:3001.
   # NOTE: the UC UI publishes no versioned release — only rolling `main` builds.
-  # Pin to a specific main build for reproducibility (there is no 0.5.0 UI tag).
+  # Pin to a specific main build for reproducibility (there is no 0.6.0 UI tag).
   unity-catalog-ui:
     image: unitycatalog/unitycatalog-ui:main-aadc6fc
     container_name: unity-catalog-ui

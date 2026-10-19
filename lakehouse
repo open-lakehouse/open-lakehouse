@@ -3266,7 +3266,7 @@ Services:
   spark          Apache Spark 4.1 cluster (ports 7078, UI 8082)
   kafka          Kafka 3.6 + Zookeeper
   airflow        Apache Airflow 3.1 (UI 8085)
-  unity-catalog  Unity Catalog OSS 0.5.0 (REST API 8081)
+  unity-catalog  Unity Catalog OSS 0.6.0 (REST API 8081)
   mlflow         MLflow 3.14 (tracking 5000, AI gateway 5001)
   delta-sharing  Delta Sharing server + re-signing proxy (HTTPS 8443) — via `share`, opt-in
   all            Spark + Kafka (start storage, unity-catalog, airflow, mlflow individually)
