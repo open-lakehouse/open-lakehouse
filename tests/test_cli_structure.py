@@ -97,6 +97,7 @@ class TestContainerRefsAreOverlayResolved:
         "airflow-webserver",
         "airflow-scheduler",
         "airflow-triggerer",
+        "airflow-dag-processor",
         "jupyter",
     )
 
