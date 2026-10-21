@@ -4,7 +4,7 @@
 # an entrypoint that injects the UC token into spark-defaults.conf at start.
 # Compute is real local Spark (JVM) in the kernel — needed for real SDP + RTM.
 # Build context = repo root:  docker build -f docker/jupyter-hosted/Dockerfile -t openlakehouse-notebooks .
-FROM apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+FROM apache/spark:4.1.3-scala2.13-java21-python3-r-ubuntu
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -25,7 +25,7 @@ RUN set --; \
 RUN set --; \
     if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
     pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
-      jupyterlab==4.3.0 ipykernel==6.29.5 pyspark==4.1.0 \
+      jupyterlab==4.3.0 ipykernel==6.29.5 pyspark==4.1.3 \
       pandas==2.2.3 pyarrow==18.1.0 matplotlib==3.9.2 "httpx<0.28" \
       pyyaml grpcio grpcio-status protobuf zstandard kafka-python
 
