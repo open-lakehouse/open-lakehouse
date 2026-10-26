@@ -99,6 +99,19 @@ jobs:
       - name: Bring up Spark (reads the swapped live conf — storage already up)
         run: ./lakehouse start all
 
+      - name: Bring up Unity Catalog (the catalog-managed path the bad legs break on)
+        run: ./lakehouse start unity-catalog
+
+      - name: "Calibration: catalog-managed Delta (I-45) on this Delta version"
+        if: always()
+        run: |
+          set +e
+          poetry run pytest \
+            "tests/integration/sdp/test_sdp_table_formats.py::TestI45CatalogManagedDelta::test_i45_catalog_managed_delta_no_location" \
+            -rA -q --no-header 2>&1 | grep -vE "^\s+at |INFO |WARN " | tail -80
+          echo "i45 rc=${PIPESTATUS[0]}"
+          exit 0
+
       - name: Readiness gate (spark-master must be up — a down master is a failure)
         run: |
           set -e
