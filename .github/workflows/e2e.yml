@@ -67,6 +67,15 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      # The in-process SparkSession tests launch a JVM on the runner itself.
+      # Spark 4.1 supports Java 17/21; the Ubuntu 26.04 image defaults to 25,
+      # where Hadoop's Subject.getSubject call is unsupported and the gateway
+      # exits at startup. The containers bring their own Java 21.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - run: pipx install --python "$(command -v python)" poetry==2.1.0
       - run: poetry install --with dev,test
 
