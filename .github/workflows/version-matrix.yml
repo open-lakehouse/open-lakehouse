@@ -6,16 +6,20 @@ name: Version matrix (T4)
 # rationale says they do. If a "bad" version starts passing, the rationale is
 # stale and a human must reconcile docs/testing.md before the pin can move.
 #
-# Delta is the canonical case (I-02): 4.3.1 is the pin; 4.3.0 NPEs through the UC
-# Spark connector; 4.2.0 cannot do catalog-managed Delta. This matrix swaps each
-# onto the live classpath and asserts pass/fail against expectation.
+# Delta is the canonical case: 4.3.1 is the pin, and 4.2.0 cannot do
+# catalog-managed Delta through the UC 0.5.x connector. Each leg swaps its Delta
+# onto the live classpath, brings up Spark + Unity Catalog, and runs two gates:
+#   I-02  path-based Delta write/append/read/time-travel (the stack is healthy)
+#   I-45  catalog-managed Delta through UCSingleCatalog (what the pin protects)
+# A "pass" leg must pass both. A "fail" leg must pass I-02 and fail I-45 with
+# the measured signature, so it cannot go green by failing for an unrelated
+# reason. A skipped or missing gate is red on every leg.
 #
-# NOTE: authored against the ./lakehouse stack + tests/integration/test_delta_version.py
-# but NOT yet calibrated on a live runner (Docker/Maven were unavailable at
-# authoring time). The first dispatch run is the calibration pass — in particular
-# confirm the bad-version failure signatures match the rationale, and tighten the
-# assertion (see the "assert outcome" step) if a bad version fails for the wrong
-# reason.
+# Calibrated on the Ubuntu 26.04 runner (2026-10-26), with each leg confirmed to
+# load its own delta-spark/delta-storage jars: 4.3.1 passes both; 4.2.0 fails
+# I-45 with UC's `400 INVALID_ARGUMENT ... Invalid type_json`. Delta 4.3.0 was
+# recorded as NPE-ing through the UC connector, but on this jar set it passes
+# I-45 and every other UC gate (I-44, I-42, I-47), so it is no longer a leg.
 
 on:
   pull_request:
@@ -58,10 +62,10 @@ jobs:
         include:
           - delta: "4.3.1"   # the pin — must PASS
             expect: pass
-          - delta: "4.3.0"   # NPEs through the UC connector — must FAIL
+            signature: ""
+          - delta: "4.2.0"   # no catalog-managed Delta — I-45 must FAIL this way
             expect: fail
-          - delta: "4.2.0"   # no catalog-managed Delta — must FAIL
-            expect: fail
+            signature: "Invalid type_json"
     steps:
       - uses: actions/checkout@v5
 
@@ -99,6 +103,9 @@ jobs:
       - name: Bring up Spark (reads the swapped live conf — storage already up)
         run: ./lakehouse start all
 
+      - name: Bring up Unity Catalog (I-45 runs through it)
+        run: ./lakehouse start unity-catalog
+
       - name: Readiness gate (spark-master must be up — a down master is a failure)
         run: |
           set -e
@@ -112,28 +119,59 @@ jobs:
           print("spark-master up — evaluating Delta ABI.")
           PY
 
-      - name: Run the Delta ABI test, assert outcome matches expectation
+      - name: Run the Delta gates, assert outcome matches expectation
+        env:
+          DELTA: ${{ matrix.delta }}
+          EXPECT: ${{ matrix.expect }}
+          SIGNATURE: ${{ matrix.signature }}
         run: |
           set +e
           poetry run pytest \
             tests/integration/test_delta_version.py::test_i02_delta_write_read_timetravel \
-            -q --no-header
-          rc=$?
+            "tests/integration/sdp/test_sdp_table_formats.py::TestI45CatalogManagedDelta::test_i45_catalog_managed_delta_no_location" \
+            -q --no-header -rA --junitxml=matrix-report.xml
           set -e
-          echo "pytest rc=$rc for Delta ${{ matrix.delta }} (expect ${{ matrix.expect }})"
-          if [ "${{ matrix.expect }}" = "pass" ]; then
-            if [ $rc -ne 0 ]; then
-              echo "::error::Delta ${{ matrix.delta }} was expected to PASS but failed (rc=$rc). The pin may be broken."
-              exit 1
-            fi
-            echo "✓ Delta ${{ matrix.delta }} passed — good pin verified end to end."
-          else
-            if [ $rc -eq 0 ]; then
-              echo "::error::Delta ${{ matrix.delta }} was expected to FAIL but PASSED. The pin rationale is STALE — reconcile docs/testing.md and docs/compatibility.md before moving the pin."
-              exit 1
-            fi
-            echo "✓ Delta ${{ matrix.delta }} failed as expected — negative gate holds."
-          fi
+          python3 - <<'PY'
+          import os, sys, xml.etree.ElementTree as ET
+
+          delta, expect, sig = os.environ["DELTA"], os.environ["EXPECT"], os.environ["SIGNATURE"]
+          GATES = {"test_i02_delta_write_read_timetravel": "I-02",
+                   "test_i45_catalog_managed_delta_no_location": "I-45"}
+          try:
+              root = ET.parse("matrix-report.xml").getroot()
+          except FileNotFoundError:
+              print("::error::no matrix-report.xml; the gates did not run"); sys.exit(1)
+          res = {}
+          for tc in root.iter("testcase"):
+              gate = GATES.get(tc.get("name"))
+              if not gate:
+                  continue
+              outcome, text = "passed", ""
+              for child in tc:
+                  if child.tag in ("failure", "error", "skipped"):
+                      outcome = "failed" if child.tag == "failure" else child.tag
+                      text = (child.get("message") or "") + "\n" + (child.text or "")
+              res[gate] = (outcome, text)
+          for gate in GATES.values():
+              print(f"Delta {delta}: {gate} {res.get(gate, ('missing',))[0]}")
+
+          bad = [g for g in GATES.values() if res.get(g, ("missing",))[0] in ("missing", "skipped", "error")]
+          if bad:
+              print(f"::error::Delta {delta}: gate(s) {bad} did not run to a verdict; a skip is a failure here"); sys.exit(1)
+          if res["I-02"][0] != "passed":
+              print(f"::error::Delta {delta}: path-based Delta (I-02) failed, so this leg says nothing about the pin"); sys.exit(1)
+          i45, text = res["I-45"]
+          if expect == "pass":
+              if i45 != "passed":
+                  print(f"::error::Delta {delta} was expected to PASS catalog-managed Delta (I-45) but failed. The pin may be broken."); sys.exit(1)
+              print(f"Delta {delta} passed I-02 and I-45: good pin verified end to end.")
+          else:
+              if i45 == "passed":
+                  print(f"::error::Delta {delta} was expected to FAIL catalog-managed Delta (I-45) but PASSED. The pin rationale is STALE; reconcile docs/testing.md and docs/compatibility.md before moving the pin."); sys.exit(1)
+              if sig not in text:
+                  print(f"::error::Delta {delta} failed I-45, but not with the recorded signature {sig!r}. It failed for a different reason; re-measure before trusting this gate."); sys.exit(1)
+              print(f"Delta {delta} failed I-45 with {sig!r} as recorded: negative gate holds.")
+          PY
 
       - name: Teardown (safe stop — never down -v)
         if: always()

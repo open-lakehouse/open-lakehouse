@@ -7,8 +7,9 @@ or when a forbidden (known-broken) version or a JDBC-catalog path has leaked int
 shipped config. It runs in the existing unit job — no runner, no network.
 
 The behavioral half (does Delta 4.3.1 actually work on the pinned classpath, and
-does 4.3.0 actually fail) lives in tests/integration/test_delta_version.py and
-the e2e version-change matrix.
+does 4.2.0 actually fail catalog-managed Delta) lives in
+tests/integration/test_delta_version.py, the I-45 test, and the version-change
+matrix.
 """
 
 import shutil
