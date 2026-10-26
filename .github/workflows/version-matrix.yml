@@ -110,6 +110,13 @@ jobs:
             "tests/integration/sdp/test_sdp_table_formats.py::TestI45CatalogManagedDelta::test_i45_catalog_managed_delta_no_location" \
             -rA -q --no-header 2>&1 | grep -vE "^\s+at |INFO |WARN " | tail -80
           echo "i45 rc=${PIPESTATUS[0]}"
+          echo "--- I-45 exception head (rerun of the same script)"
+          docker exec spark-master-41 /opt/spark/bin/spark-submit /tmp/_i45.py 2>&1 \
+            | grep -E "Exception|Error|Caused by|NullPointer|I45" | grep -vE "^\s+at " | head -12
+          echo "--- other UC gates: I-44 (external Delta via UC), I-42 (both formats), I-47"
+          poetry run pytest tests/integration/test_unity_catalog.py::TestUC050Gates \
+            tests/integration/test_neutrality.py -rA -q --no-header 2>&1 \
+            | grep -E "PASSED|FAILED|SKIPPED|ERROR|NullPointer|Caused by|Exception:" | grep -vE "^\s+at " | head -30
           exit 0
 
       - name: Readiness gate (spark-master must be up — a down master is a failure)
