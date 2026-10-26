@@ -68,7 +68,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - run: pipx install poetry==2.1.0
+      - run: pipx install --python "$(command -v python)" poetry==2.1.0
       - run: poetry install --with dev,test
 
       - name: Prepare env (.env + configs from examples)

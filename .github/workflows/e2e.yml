@@ -67,7 +67,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - run: pipx install poetry==2.1.0
+      - run: pipx install --python "$(command -v python)" poetry==2.1.0
       - run: poetry install --with dev,test
 
       - name: Cache JAR downloads
