@@ -113,6 +113,18 @@ jobs:
           echo "--- I-45 exception head (rerun of the same script)"
           docker exec spark-master-41 /opt/spark/bin/spark-submit /tmp/_i45.py 2>&1 \
             | grep -E "Exception|Error|Caused by|NullPointer|I45" | grep -vE "^\s+at " | head -12
+          echo "--- which Delta the JVM actually loads"
+          cat > /tmp/_which.py <<'PY'
+          from pyspark.sql import SparkSession
+          s = SparkSession.builder.master("local[1]").config("spark.ui.enabled","false").getOrCreate()
+          print("spark.jars =", s.conf.get("spark.jars", ""))
+          for cls in ["io.delta.sql.DeltaSparkSessionExtension", "io.delta.storage.LogStore"]:
+              c = s._jvm.java.lang.Class.forName(cls)
+              print(cls, "->", c.getProtectionDomain().getCodeSource().getLocation().toString())
+          s.stop()
+          PY
+          docker cp /tmp/_which.py spark-master-41:/tmp/_which.py
+          docker exec spark-master-41 /opt/spark/bin/spark-submit /tmp/_which.py 2>/dev/null | grep -E "spark.jars|->" | tr ',' '\n' | grep -E "delta|->"
           echo "--- other UC gates: I-44 (external Delta via UC), I-42 (both formats), I-47"
           poetry run pytest tests/integration/test_unity_catalog.py::TestUC050Gates \
             tests/integration/test_neutrality.py -rA -q --no-header 2>&1 \
