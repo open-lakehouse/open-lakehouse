@@ -155,7 +155,7 @@ query.awaitTermination()
 Run with:
 ```bash
 docker exec spark-master-41 /opt/spark/bin/spark-submit \
-  --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0 \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.3 \
   /scripts/quickstarts/04-kafka-streaming.py
 ```
 
