@@ -58,21 +58,23 @@ JAR_LIST=(
     "bundle-2.24.6.jar|${MAVEN_BASE_URL}/software/amazon/awssdk/bundle/2.24.6/bundle-2.24.6.jar|400000000"
     "postgresql-42.7.4.jar|${MAVEN_BASE_URL}/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar|1000000"
     # Delta 4.3.1 — ABI-verified on Spark 4.1/Java21 (I-02) and required for
-    # catalog-managed Delta via the UC 0.5.x connector family below. NOTE:
+    # catalog-managed Delta via the UC 0.6.x connector family below. NOTE:
     # 4.3.0 NPEs through the UC Spark connector (AbstractDeltaCatalogClient reads a
     # null catalog-options map); 4.3.1 fixes it. 4.0.x breaks with NoSuchMethodError
     # on org.apache.spark.internal.LogKey — do not downgrade.
     "delta-spark_2.13-4.3.1.jar|${MAVEN_BASE_URL}/io/delta/delta-spark_2.13/4.3.1/delta-spark_2.13-4.3.1.jar|8000000"
     "delta-storage-4.3.1.jar|${MAVEN_BASE_URL}/io/delta/delta-storage/4.3.1/delta-storage-4.3.1.jar|70000"
-    # Unity Catalog OSS Spark connector family (0.5.x). The connector lets Spark
+    # Unity Catalog OSS Spark connector family (0.6.x). The connector lets Spark
     # write Delta tables that register in UC (catalogs `unity` / `managed_demo`);
     # the client jar is its runtime dep, and the hadoop jar provides the
-    # credential-vending Hadoop configs (UCCredentialHadoopConfs). connector tops
-    # out at 0.4.1 (no 0.5.x published) but pairs with the 0.5.1 client + hadoop —
-    # this exact set is what makes catalog-managed Delta work (PR #13 / I-45).
-    "unitycatalog-spark_2.13-0.4.1.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-spark_2.13/0.4.1/unitycatalog-spark_2.13-0.4.1.jar|20000"
-    "unitycatalog-client-0.5.1.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-client/0.5.1/unitycatalog-client-0.5.1.jar|400000"
-    "unitycatalog-hadoop-0.5.1.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-hadoop/0.5.1/unitycatalog-hadoop-0.5.1.jar|40000"
+    # credential-vending Hadoop configs (UCCredentialHadoopConfs). Since 0.5.x the
+    # Spark connector artifact is published per Spark minor — this stack is Spark
+    # 4.1.x, so the artifact is `unitycatalog-spark_4.1_2.13` (the old unscoped
+    # `unitycatalog-spark_2.13` name stopped at 0.4.1). This set makes
+    # catalog-managed Delta work (PR #13 / I-45).
+    "unitycatalog-spark_4.1_2.13-0.6.0.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-spark_4.1_2.13/0.6.0/unitycatalog-spark_4.1_2.13-0.6.0.jar|20000"
+    "unitycatalog-client-0.6.0.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-client/0.6.0/unitycatalog-client-0.6.0.jar|400000"
+    "unitycatalog-hadoop-0.6.0.jar|${MAVEN_BASE_URL}/io/unitycatalog/unitycatalog-hadoop/0.6.0/unitycatalog-hadoop-0.6.0.jar|40000"
     # Spark SQL Kafka connector — needed by any Structured Streaming job that
     # reads/writes Kafka (the realtime-mode demo, any streaming SDP source).
     # `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0`

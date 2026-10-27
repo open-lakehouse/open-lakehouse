@@ -85,8 +85,8 @@ enforced process rather than a hope.
 
 ## Current pins under test
 
-Spark 4.1.0 (Scala 2.13 / Java 21) · Delta 4.3.1 · Iceberg 1.10.0 · UC OSS 0.5.0
-(Spark connector 0.4.1 + client 0.5.1 + hadoop 0.5.1) · MLflow 3.14 · Kafka
+Spark 4.1.0 (Scala 2.13 / Java 21) · Delta 4.3.1 · Iceberg 1.10.0 · UC OSS 0.6.0
+(Spark connector 0.6.0 + client 0.6.0 + hadoop 0.6.0) · MLflow 3.14 · Kafka
 (cp-kafka 7.5.0 = Apache 3.5) · AWS SDK v2 2.24.6 · PostgreSQL 16.
 
 Known-bad, held by negative tests: Delta 4.3.0 (UC-connector NPE), Delta 4.2.0
