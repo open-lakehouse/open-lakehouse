@@ -154,12 +154,13 @@ Without them you get `ModuleNotFoundError` from `pyspark/pipelines/cli.py`.
 > works only on **Delta 4.3.1 + the UC 0.5.x connector family** — connector
 > `unitycatalog-spark_2.13:0.4.1` + client `unitycatalog-client:0.5.1` + hadoop
 > `unitycatalog-hadoop:0.5.1`. Why the earlier combinations failed:
-> - **Delta 4.2.0**: a location-less `CREATE … USING delta` is *not delegated*
->   to the UC V2 catalog — Spark routes it to the session `spark_catalog` and
->   fails `SCHEMA_NOT_FOUND`. (Explicit `LOCATION` still works on 4.2.0.)
-> - **Delta 4.3.0**: delegates, then NPEs in
->   `AbstractDeltaCatalogClient.fromCatalogOptionsIfEnabled` (null catalog
->   options). **Delta 4.3.1 fixes this.**
+> - **Delta 4.2.0**: a location-less catalog-managed `CREATE … USING delta` is
+>   rejected by UC with `400 INVALID_ARGUMENT ... Invalid type_json` (measured
+>   in the version matrix, 2026-10-26). Explicit `LOCATION` still works on 4.2.0.
+> - **Delta 4.3.0**: was recorded as NPE-ing in
+>   `AbstractDeltaCatalogClient.fromCatalogOptionsIfEnabled`; on the current
+>   connector set it passes I-45 and the other UC gates. **Stay on 4.3.1** anyway,
+>   since that is the version every gate pins.
 > - **Mismatched connector jars**: connector 0.4.1 needs client **0.5.1**
 >   (`io.unitycatalog.client.delta.model.*`) and hadoop **0.5.1**
 >   (`UCCredentialHadoopConfs`). With client/hadoop 0.4.x you get

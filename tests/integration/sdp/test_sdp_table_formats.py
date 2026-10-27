@@ -378,12 +378,14 @@ class TestI45CatalogManagedDelta:
             check=True,
             capture_output=True,
         )
-        out = _sp.run(
+        r = _sp.run(
             ["docker", "exec", _MASTER, "/opt/spark/bin/spark-submit", "/tmp/_i45.py"],
             capture_output=True,
             text=True,
             timeout=300,
-        ).stdout
+        )
+        # Both streams: the driver's print() goes to stdout, the JVM exception to stderr.
+        out = f"{r.stdout}\n--- stderr ---\n{r.stderr}"
         # The table's UC storage_location must be catalog-assigned (under __unitystorage).
         # Look it up before asserting on the Spark output, but never let a 404
         # (table never created because spark-submit failed) mask that output.
@@ -401,5 +403,17 @@ class TestI45CatalogManagedDelta:
                 )
             except Exception:
                 pass
-        assert "I45_PASS" in out, f"catalog-managed Delta failed:\n{out[-1500:]}"
+        # Lead with the exception lines: the tail alone is stack frames, and the
+        # version matrix matches the failure signature against this message.
+        errs = [
+            ln.strip()
+            for ln in out.splitlines()
+            if ("Exception" in ln or "Error" in ln)
+            and not ln.lstrip().startswith("at ")
+        ][:5]
+        assert "I45_PASS" in out, (
+            "catalog-managed Delta failed:\n"
+            + "\n".join(errs)
+            + f"\n...\n{out[-1500:]}"
+        )
         assert "__unitystorage" in loc, f"table not catalog-managed (loc={loc!r})"
