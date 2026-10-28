@@ -1,5 +1,5 @@
 # Test overlay for docker-compose-airflow.yml — see tests/overlays/README.md.
-# Overrides all four services the base declares (via its x-airflow-common anchor):
+# Overrides all five services the base declares (via its x-airflow-common anchor):
 # run-scopes container names, switches host->bridge, and points the metadata DB at
 # the run-scoped ol_test_<runid>_airflow database on the host-installed PostgreSQL.
 services:
@@ -18,10 +18,11 @@ services:
     command:
       - -c
       - |
+        set -euo pipefail
         PGPASSWORD=${POSTGRES_PASSWORD} psql -h host.docker.internal -U ${POSTGRES_USER} -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'ol_test_${LAKEHOUSE_RESOURCE_SUFFIX}_airflow'" | grep -q 1 || \
         PGPASSWORD=${POSTGRES_PASSWORD} psql -h host.docker.internal -U ${POSTGRES_USER} -d postgres -c "CREATE DATABASE ol_test_${LAKEHOUSE_RESOURCE_SUFFIX}_airflow"
         airflow db migrate
-        airflow users list | grep -q "${AIRFLOW_ADMIN_USER:-admin}" || \
+        airflow users list --output json | python -c 'import json, sys; sys.exit(0 if any(u["username"] == sys.argv[1] for u in json.load(sys.stdin)) else 1)' "${AIRFLOW_ADMIN_USER:-admin}" || \
         airflow users create \
           --username ${AIRFLOW_ADMIN_USER:-admin} \
           --password ${AIRFLOW_ADMIN_PASSWORD:-admin} \
@@ -65,6 +66,22 @@ services:
 
   airflow-triggerer:
     container_name: airflow-triggerer-${LAKEHOUSE_RESOURCE_SUFFIX}
+    env_file: !override
+      - path: .env
+        required: false
+    network_mode: !reset null
+    networks:
+      - default
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:5432/ol_test_${LAKEHOUSE_RESOURCE_SUFFIX}_airflow
+      SPARK_MASTER_41: spark://spark-master-41-${LAKEHOUSE_RESOURCE_SUFFIX}:7078
+      KAFKA_BOOTSTRAP_SERVERS: kafka-${LAKEHOUSE_RESOURCE_SUFFIX}:9092
+      AWS_ENDPOINT_URL: http://host.docker.internal:8333
+
+  airflow-dag-processor:
+    container_name: airflow-dag-processor-${LAKEHOUSE_RESOURCE_SUFFIX}
     env_file: !override
       - path: .env
         required: false

@@ -8,8 +8,9 @@ be overridden at build time without changing or committing repository files.
 With no proxy variables set, builds use:
 
 - Python packages: `https://pypi.org/simple`
-- Airflow's Spark distribution:
-  `https://archive.apache.org/dist/spark/spark-4.1.0/spark-4.1.0-bin-hadoop3.tgz`
+- Airflow's Spark distribution: copied from the pinned
+  `apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu` image. Set
+  `SPARK_DIST_URL` only when supplying a replacement archive.
 
 These public defaults keep the normal online build path unchanged.
 

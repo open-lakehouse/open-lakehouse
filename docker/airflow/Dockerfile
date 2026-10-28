@@ -1,37 +1,38 @@
-# Airflow 3.1.6 with Python 3.12
+# Airflow 3.1.6 with Python 3.12 and the stack's pinned Spark distribution.
+FROM apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu AS spark-runtime
+
 FROM apache/airflow:3.1.6-python3.12
 
 ARG PIP_INDEX_URL=https://pypi.org/simple
 ARG PIP_TRUSTED_HOST=
-ARG SPARK_DIST_URL=https://archive.apache.org/dist/spark/spark-4.1.0/spark-4.1.0-bin-hadoop3.tgz
+ARG SPARK_DIST_URL=
 
 USER root
 
-# Install system dependencies. Debian 11 "bullseye" LTS ended 2026-08-31, so the
-# base image's apt sources (deb.debian.org) now 404 on the postgresql-13 / libpq5
-# pool files. Repoint to archive.debian.org + skip Valid-Until so apt can still
-# fetch. Long-term fix is a base-image bump off bullseye — tracked separately.
-RUN rm -rf /var/lib/apt/lists/* \
-    && sed -i -E 's|https?://deb.debian.org/debian-security|http://archive.debian.org/debian-security|g; s|https?://deb.debian.org/debian|http://archive.debian.org/debian|g; s|https?://security.debian.org|http://archive.debian.org/debian-security|g' /etc/apt/sources.list \
-    && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid-until \
-    && apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies using the base image's Debian repositories.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     openjdk-17-jre-headless \
     curl \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s "/usr/lib/jvm/java-17-openjdk-$(dpkg --print-architecture)" /opt/java
 
-# Set JAVA_HOME for Spark (Java 17 works with Spark 4.0 and 4.1)
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+# Resolve Java for both Apple Silicon (arm64) and x86 hosts.
+ENV JAVA_HOME=/opt/java
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-# Download and install Spark (for spark-submit)
+# Reuse the pinned distribution instead of downloading it again from the archive.
+# A custom distribution URL remains available for package-proxy environments.
 ENV SPARK_VERSION=4.1.0
 ENV SPARK_HOME=/opt/spark
-RUN curl -fsSL "$SPARK_DIST_URL" \
-    | tar -xz -C /opt/ \
-    && mv /opt/spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME} \
-    && chown -R airflow:root ${SPARK_HOME}
+COPY --from=spark-runtime --chown=airflow:root /opt/spark /opt/spark
+RUN if [ -n "$SPARK_DIST_URL" ]; then \
+      curl -fsSL "$SPARK_DIST_URL" | tar -xz -C /tmp/ \
+      && rm -rf "$SPARK_HOME" \
+      && mv "/tmp/spark-${SPARK_VERSION}-bin-hadoop3" "$SPARK_HOME" \
+      && chown -R airflow:root "$SPARK_HOME"; \
+    fi
 
 ENV PATH="${SPARK_HOME}/bin:${PATH}"
 
@@ -41,6 +42,7 @@ USER airflow
 RUN set --; \
     if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
     pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
+      "apache-airflow==${AIRFLOW_VERSION}" \
       apache-airflow-providers-apache-spark==5.5.0 \
       apache-airflow-providers-postgres==5.14.0 \
       apache-airflow-providers-apache-kafka==1.8.0 \
