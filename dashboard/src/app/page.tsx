@@ -62,7 +62,7 @@ const services: Omit<ServiceHealth, "status">[] = [
   {
     name: "AI Gateway",
     url: "/api/health/ai-gateway",
-    port: 5001,
+    port: 5000,
     description: "MLflow AI Gateway (optional service)",
   },
 ];
