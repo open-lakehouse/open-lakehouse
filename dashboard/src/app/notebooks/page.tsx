@@ -5,6 +5,7 @@
 
 import { Suspense, useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import JupyterLaunchButton from "@/components/jupyter-launch-button";
 import CodeExecGuard from "@/components/code-exec-guard";
 import {
   BookOpen,
@@ -375,7 +376,6 @@ function NotebooksPageInner() {
   const [restartingKernel, setRestartingKernel] = useState(false);
   const [interruptingKernel, setInterruptingKernel] = useState(false);
 
-  const jupyterBaseUrl = "http://localhost:8889";
 
   const fetchItems = useCallback(async (path: string) => {
     setLoading(true);
@@ -657,16 +657,13 @@ function NotebooksPageInner() {
             Browse, view, and execute Jupyter notebooks
           </p>
         </div>
-        <a
-          href={jupyterBaseUrl}
-          target="_blank"
-          rel="noopener noreferrer"
+        <JupyterLaunchButton
           className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:border-accent hover:text-white"
         >
           <Terminal size={16} />
           Open JupyterLab
           <ExternalLink size={14} />
-        </a>
+        </JupyterLaunchButton>
       </div>
 
       {error && (
@@ -769,15 +766,12 @@ function NotebooksPageInner() {
                     </button>
                   );
                 })()}
-                <a
-                  href={`${jupyterBaseUrl}/lab/tree/${selectedNotebook.path}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <JupyterLaunchButton path={selectedNotebook.path}
                   className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-300 hover:border-accent hover:text-white"
                 >
                   Open in Jupyter
                   <ExternalLink size={12} />
-                </a>
+                </JupyterLaunchButton>
               </div>
             </div>
 
@@ -857,18 +851,15 @@ function NotebooksPageInner() {
             {!kernelReady && (
               <div className="mt-3 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2">
                 <AlertCircle size={14} className="text-amber-400" />
-                <span className="text-xs text-slate-400">
+                <div className="text-xs text-slate-400">
                   Start a kernel to execute cells. You can also{" "}
-                  <a
-                    href={`${jupyterBaseUrl}/lab/tree/${selectedNotebook.path}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <JupyterLaunchButton path={selectedNotebook.path}
                     className="text-accent hover:underline"
                   >
                     open in JupyterLab
-                  </a>{" "}
+                  </JupyterLaunchButton>{" "}
                   for the full notebook experience.
-                </span>
+                </div>
               </div>
             )}
           </div>
@@ -1037,16 +1028,12 @@ function NotebooksPageInner() {
                         </span>
                       )}
                       {item.type === "notebook" && (
-                        <a
-                          href={`${jupyterBaseUrl}/lab/tree/${item.path}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
+                        <JupyterLaunchButton path={item.path}
                           className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-400 opacity-0 transition-all hover:border-accent hover:text-accent group-hover:opacity-100"
                           aria-label="Open in JupyterLab"
                         >
                           <ExternalLink size={12} />
-                        </a>
+                        </JupyterLaunchButton>
                       )}
                       <ChevronRight
                         size={16}

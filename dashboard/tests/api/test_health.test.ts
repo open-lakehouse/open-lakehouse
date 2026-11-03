@@ -99,3 +99,47 @@ describe("OpenSharing Health API (/api/health/delta-sharing)", () => {
     expect(data.message).toContain("DELTA_SHARING_TOKEN");
   });
 });
+
+describe("AI Gateway Health API (/api/health/ai-gateway)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.MLFLOW_URL;
+  });
+
+  it("checks the embedded MLflow gateway registry", async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      new Response("{}", { status: 200 })
+    );
+    const { GET } = await import("@/app/api/health/ai-gateway/route");
+    const response = await GET();
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://mlflow-server:5000/api/3.0/mlflow/gateway/endpoints/list",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "healthy" });
+  });
+
+  it("uses the configured MLflow server", async () => {
+    process.env.MLFLOW_URL = "http://tracking.example.test:7000";
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response("{}", { status: 200 }));
+    const { GET } = await import("@/app/api/health/ai-gateway/route");
+    expect((await GET()).status).toBe(200);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "http://tracking.example.test:7000/api/3.0/mlflow/gateway/endpoints/list",
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    );
+  });
+
+  it.each(["error", "unavailable"])("reports %s gateway failures", async (mode) => {
+    if (mode === "error") {
+      vi.mocked(global.fetch).mockResolvedValueOnce(new Response("", { status: 500 }));
+    } else {
+      vi.mocked(global.fetch).mockRejectedValueOnce(new Error("Connection refused"));
+    }
+    const { GET } = await import("@/app/api/health/ai-gateway/route");
+    const response = await GET();
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: mode === "error" ? "unhealthy" : "unknown" });
+  });
+});

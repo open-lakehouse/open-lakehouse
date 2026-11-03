@@ -600,7 +600,7 @@ cmd_status_human() {
     echo "  Kafka:            9092"
     echo "  Zookeeper:        2181"
     echo "  Airflow:          8085 (UI)"
-    echo "  MLflow:           5000 (Tracking), 5001 (AI Gateway)"
+    echo "  MLflow:           5000 (Tracking + AI Gateway)"
     echo "  Delta Sharing:    8443 (HTTPS, opt-in via 'share')"
     echo "  Dashboard:        3000 (optional, read-only viewer)"
 

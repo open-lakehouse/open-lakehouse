@@ -8,7 +8,7 @@ import { NextRequest } from "next/server";
 describe("Jupyter Proxy (/api/jupyter/[...path])", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    process.env.JUPYTER_URL = "http://jupyter:8888";
+    process.env.JUPYTER_URL = "http://jupyter:8889";
     process.env.JUPYTER_TOKEN = "test-token";
   });
 

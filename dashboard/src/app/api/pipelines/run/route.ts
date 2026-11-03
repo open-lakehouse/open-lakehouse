@@ -6,7 +6,7 @@ import { appendRun, type RunHistoryEntry } from "@/lib/s3";
 import { requireEnv } from "@/lib/env";
 import { codeExecutionEnabled, codeExecutionDisabledResponse } from "@/lib/features";
 
-const JUPYTER_URL = () => process.env.JUPYTER_URL || "http://jupyter:8888";
+const JUPYTER_URL = () => process.env.JUPYTER_URL || "http://jupyter:8889";
 const JUPYTER_TOKEN = () => requireEnv("JUPYTER_TOKEN");
 const PIPELINES_DIR = process.env.PIPELINES_DIR!;
 
