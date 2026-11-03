@@ -1,5 +1,9 @@
 # Installation Guide
 
+For Docker-managed local storage, use the [automatic local credential bootstrap](../guides/local-credentials.md).
+It generates missing credentials and matching service configuration before storage starts.
+The host-installed storage sections below require the actual credentials you configured for those services.
+
 This guide walks you through setting up the lakehouse stack from scratch. Follow the instructions for your operating system.
 
 > **Quick Start**: If you already have prerequisites installed, see [Quickstart](quickstart.md).
