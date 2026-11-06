@@ -36,6 +36,7 @@ Runs locally via Docker Compose; deploys to AWS via `terraform/`. Optional Datab
 | Kafka + Structured Streaming | `.claude/skills/kafka-streaming/` |
 | Airflow 3.1 DAGs and 2→3 gotchas | `.claude/skills/airflow-3/` |
 | MLflow tracking + AI Gateway | `.claude/skills/mlflow/` |
+| Platform UI (login, Catalog, Data Lake, Jobs) | `.claude/skills/dashboard/` |
 | Cross-service work (delegated agent) | `.claude/agents/lakehouse-engineer.md` |
 | Human-facing setup | `README.md`, `docs/getting-started/` |
 | Demo-lifecycle narrative for humans | `docs/runbooks/demo-lifecycle.md` |

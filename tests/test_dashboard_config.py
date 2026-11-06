@@ -24,7 +24,7 @@ pytestmark = pytest.mark.dashboard
 
 # Env vars supplied by the Node/Next runtime or the Dockerfile, not the compose
 # environment block — allowed to be read in code without a compose entry.
-_RUNTIME_ENV = {"NODE_ENV", "PORT", "HOSTNAME"}
+_RUNTIME_ENV = {"NODE_ENV", "PORT", "HOSTNAME", "NEXT_RUNTIME"}
 
 
 def _read(p: Path) -> str:
@@ -61,6 +61,17 @@ def test_compose_exists_and_binds_loopback_3000():
     assert (
         '"127.0.0.1:3000:3000"' in text
     ), "dashboard must publish only on loopback:3000"
+
+
+def test_login_has_no_default_password():
+    """The platform UI login must not ship a usable default password, and every
+    route except the login endpoints sits behind the session middleware."""
+    text = _read(COMPOSE)
+    assert "DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}" in text
+    assert "AIRFLOW_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-}" in text
+    middleware = _read(DASHBOARD / "src/middleware.ts")
+    assert "verifySession" in middleware
+    assert '"/api/auth/login"' in middleware
 
 
 def test_code_execution_off_by_default():

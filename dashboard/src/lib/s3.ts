@@ -6,6 +6,9 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
+  ListBucketsCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { requireEnv } from "./env";
 
@@ -101,4 +104,146 @@ export async function deleteRun(id: string): Promise<RunHistoryEntry[]> {
 
 export async function clearRunHistory(): Promise<void> {
   await saveRunHistory([]);
+}
+
+// --- Data lake browser (read-only) ---
+
+export interface LakeBucket {
+  name: string;
+  createdAt: string | null;
+}
+
+export interface LakeFolder {
+  prefix: string;
+  name: string;
+}
+
+export interface LakeObject {
+  key: string;
+  name: string;
+  size: number;
+  lastModified: string | null;
+}
+
+export interface LakeListing {
+  bucket: string;
+  prefix: string;
+  folders: LakeFolder[];
+  objects: LakeObject[];
+  nextToken: string | null;
+  truncated: boolean;
+}
+
+export interface LakeObjectDetail {
+  bucket: string;
+  key: string;
+  size: number;
+  contentType: string | null;
+  lastModified: string | null;
+  etag: string | null;
+  /** Text preview (first PREVIEW_BYTES), only for text-like objects. */
+  preview: string | null;
+  previewTruncated: boolean;
+}
+
+export const PREVIEW_BYTES = 64 * 1024;
+
+/** S3 bucket naming rules (lowercase, digits, dots, hyphens; 3-63 chars). */
+export function isValidBucketName(name: string): boolean {
+  return /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(name);
+}
+
+export function defaultBucket(): string {
+  return BUCKET;
+}
+
+export async function listBuckets(): Promise<LakeBucket[]> {
+  const res = await client().send(new ListBucketsCommand({}));
+  return (res.Buckets ?? [])
+    .filter((b) => !!b.Name)
+    .map((b) => ({
+      name: b.Name as string,
+      createdAt: b.CreationDate ? b.CreationDate.toISOString() : null,
+    }));
+}
+
+function lastSegment(path: string): string {
+  const trimmed = path.endsWith("/") ? path.slice(0, -1) : path;
+  return trimmed.slice(trimmed.lastIndexOf("/") + 1);
+}
+
+export async function listObjects(
+  bucket: string,
+  prefix: string,
+  continuationToken?: string,
+  maxKeys = 500
+): Promise<LakeListing> {
+  const res = await client().send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix || undefined,
+      Delimiter: "/",
+      MaxKeys: maxKeys,
+      ContinuationToken: continuationToken || undefined,
+    })
+  );
+  const folders = (res.CommonPrefixes ?? [])
+    .map((p) => p.Prefix)
+    .filter((p): p is string => !!p)
+    .map((p) => ({ prefix: p, name: lastSegment(p) }));
+  const objects = (res.Contents ?? [])
+    .filter((o) => !!o.Key && o.Key !== prefix)
+    .map((o) => ({
+      key: o.Key as string,
+      name: lastSegment(o.Key as string),
+      size: o.Size ?? 0,
+      lastModified: o.LastModified ? o.LastModified.toISOString() : null,
+    }));
+  return {
+    bucket,
+    prefix,
+    folders,
+    objects,
+    nextToken: res.NextContinuationToken ?? null,
+    truncated: !!res.IsTruncated,
+  };
+}
+
+const TEXT_EXTENSIONS = new Set([
+  "json", "crc", "txt", "csv", "tsv", "log", "md", "yaml", "yml", "xml",
+  "properties", "conf", "sql", "py", "sh", "avsc", "ndjson", "jsonl",
+]);
+
+/** Whether an object is worth previewing as text (by content type or extension). */
+export function isTextLike(key: string, contentType: string | null | undefined): boolean {
+  if (contentType && /^(text\/|application\/(json|xml|x-ndjson|yaml))/.test(contentType)) {
+    return true;
+  }
+  const name = lastSegment(key);
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return false;
+  return TEXT_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+}
+
+export async function getObjectDetail(bucket: string, key: string): Promise<LakeObjectDetail> {
+  const head = await client().send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+  const size = head.ContentLength ?? 0;
+  const contentType = head.ContentType ?? null;
+  let preview: string | null = null;
+  if (size > 0 && isTextLike(key, contentType)) {
+    const res = await client().send(
+      new GetObjectCommand({ Bucket: bucket, Key: key, Range: `bytes=0-${PREVIEW_BYTES - 1}` })
+    );
+    preview = (await res.Body?.transformToString("utf-8")) ?? null;
+  }
+  return {
+    bucket,
+    key,
+    size,
+    contentType,
+    lastModified: head.LastModified ? head.LastModified.toISOString() : null,
+    etag: head.ETag ?? null,
+    preview,
+    previewTruncated: preview !== null && size > PREVIEW_BYTES,
+  };
 }

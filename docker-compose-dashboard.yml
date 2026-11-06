@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# Read-only web dashboard for the open-lakehouse platform (Phase 3).
+# Unified platform UI for open-lakehouse (Phase 3).
 #
-# A Next.js viewer over Unity Catalog, MLflow, SeaweedFS, and (optionally) Delta
-# Sharing. Binds to 127.0.0.1:3000 and is OPT-IN: it is deliberately NOT started
+# A Next.js app over Unity Catalog (Catalog), SeaweedFS (Data Lake), Airflow (Jobs),
+# MLflow, and (optionally) Delta Sharing, behind a login page. Sign in with
+# DASHBOARD_USERNAME / DASHBOARD_PASSWORD from .env (login is refused until a
+# password is set). Binds to 127.0.0.1:3000 and is OPT-IN: it is deliberately NOT started
 # by `./lakehouse start all`. Start it with:
 #     ./lakehouse start dashboard        # first run builds the Next.js image
 #
@@ -41,6 +43,17 @@ services:
       S3_BUCKET: ${S3_BUCKET:-lakehouse}
       JUPYTER_URL: http://jupyter:8888
       DELTA_SHARING_URL: https://delta-sharing:8443
+      AIRFLOW_URL: http://airflow-webserver:8085
+      # Platform UI login (single local operator). No default password: logins are
+      # refused until DASHBOARD_PASSWORD is set. DASHBOARD_SESSION_SECRET signs the
+      # session cookie; when empty a random one is generated at start (sessions
+      # then end when the dashboard restarts).
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-}
+      DASHBOARD_SESSION_SECRET: ${DASHBOARD_SESSION_SECRET:-}
+      # Airflow API (Jobs page, read-only). Exchanged for a JWT via POST /auth/token.
+      AIRFLOW_USERNAME: ${AIRFLOW_ADMIN_USER:-admin}
+      AIRFLOW_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-}
       # S3 credentials — match the SeaweedFS static credentials (storage compose).
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-lakehouse_s3}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-lakehouse_s3_secret}

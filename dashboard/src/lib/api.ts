@@ -13,15 +13,21 @@ export interface Catalog {
   id: string;
   name: string;
   comment?: string;
+  owner?: string;
   created_at?: number;
+  updated_at?: number;
   properties?: Record<string, string>;
 }
 
 export interface Schema {
   name: string;
   catalog_name: string;
+  full_name?: string;
   comment?: string;
+  owner?: string;
   created_at?: number;
+  updated_at?: number;
+  properties?: Record<string, string>;
 }
 
 export interface Table {
@@ -29,10 +35,15 @@ export interface Table {
   catalog_name: string;
   schema_name: string;
   table_type: string;
+  table_id?: string;
+  comment?: string;
+  owner?: string;
   data_source_format?: string;
   storage_location?: string;
   columns?: Column[];
+  properties?: Record<string, string>;
   created_at?: number;
+  updated_at?: number;
 }
 
 export interface Column {
@@ -87,9 +98,28 @@ export interface DeltaShareTable {
   id?: string;
 }
 
+/** Session expired mid-use: send the browser back to the login page. */
+function handleUnauthenticated(res: Response) {
+  if (res.status === 401 && typeof window !== "undefined") {
+    const next = window.location.pathname + window.location.search;
+    window.location.assign(`/?next=${encodeURIComponent(next)}`);
+  }
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    handleUnauthenticated(res);
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.detail ? `${body.error}: ${body.detail}` : body.error;
+      else if (body?.detail) message = String(body.detail);
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(message);
+  }
   return res.json();
 }
 
@@ -313,4 +343,171 @@ export async function executeCell(
     throw new Error(err.error || `${res.status} ${res.statusText}`);
   }
   return res.json();
+}
+
+// --- Data lake (object store, read-only) ---
+
+export interface LakeBucket {
+  name: string;
+  createdAt: string | null;
+}
+
+export interface LakeFolder {
+  prefix: string;
+  name: string;
+}
+
+export interface LakeObject {
+  key: string;
+  name: string;
+  size: number;
+  lastModified: string | null;
+}
+
+export interface LakeListing {
+  bucket: string;
+  prefix: string;
+  folders: LakeFolder[];
+  objects: LakeObject[];
+  nextToken: string | null;
+  truncated: boolean;
+}
+
+export interface LakeObjectDetail {
+  bucket: string;
+  key: string;
+  size: number;
+  contentType: string | null;
+  lastModified: string | null;
+  etag: string | null;
+  preview: string | null;
+  previewTruncated: boolean;
+}
+
+export async function getBuckets(): Promise<{ buckets: LakeBucket[]; defaultBucket: string }> {
+  return fetchJson("/api/datalake/buckets");
+}
+
+export async function getLakeListing(
+  bucket: string,
+  prefix: string,
+  token?: string
+): Promise<LakeListing> {
+  const q = new URLSearchParams({ bucket, prefix });
+  if (token) q.set("token", token);
+  return fetchJson(`/api/datalake/objects?${q}`);
+}
+
+export async function getLakeObject(bucket: string, key: string): Promise<LakeObjectDetail> {
+  return fetchJson(`/api/datalake/object?${new URLSearchParams({ bucket, key })}`);
+}
+
+/** Parse s3://, s3a://, or s3n:// URIs into bucket + key/prefix. */
+export function parseS3Uri(uri: string | undefined | null): { bucket: string; key: string } | null {
+  if (!uri) return null;
+  const m = /^s3[an]?:\/\/([^/]+)\/?(.*)$/.exec(uri);
+  if (!m) return null;
+  return { bucket: m[1], key: m[2] };
+}
+
+/** Data lake page link for a storage location (opens the folder). */
+export function dataLakeHref(uri: string | undefined | null): string | null {
+  const parsed = parseS3Uri(uri);
+  if (!parsed) return null;
+  const prefix = parsed.key && !parsed.key.endsWith("/") ? `${parsed.key}/` : parsed.key;
+  return `/datalake?${new URLSearchParams({ bucket: parsed.bucket, prefix })}`;
+}
+
+// --- Jobs (Airflow 3.x API v2, read-only) ---
+
+export interface AirflowDag {
+  dag_id: string;
+  dag_display_name?: string;
+  description?: string | null;
+  is_paused: boolean;
+  is_stale?: boolean;
+  fileloc?: string;
+  owners?: string[];
+  tags?: { name: string }[];
+  timetable_summary?: string | null;
+  timetable_description?: string | null;
+  next_dagrun_logical_date?: string | null;
+  next_dagrun_run_after?: string | null;
+  last_parsed_time?: string | null;
+  max_active_runs?: number;
+  has_import_errors?: boolean;
+}
+
+export interface AirflowDagRun {
+  dag_run_id: string;
+  dag_id: string;
+  state: string;
+  run_type?: string;
+  logical_date?: string | null;
+  run_after?: string | null;
+  queued_at?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  triggered_by?: string | null;
+}
+
+export interface AirflowTask {
+  task_id: string;
+  task_display_name?: string;
+  operator_name?: string;
+  downstream_task_ids?: string[];
+  retries?: number;
+}
+
+export interface AirflowImportError {
+  import_error_id: number;
+  filename: string;
+  stack_trace: string;
+  timestamp?: string;
+}
+
+export async function getDags(): Promise<{ dags: AirflowDag[]; total_entries: number }> {
+  return fetchJson("/api/airflow/dags?limit=200&order_by=dag_id");
+}
+
+export async function getRecentRuns(limit = 200): Promise<AirflowDagRun[]> {
+  const data = await fetchJson<{ dag_runs: AirflowDagRun[] }>(
+    `/api/airflow/dags/~/dagRuns?limit=${limit}&order_by=-run_after`
+  );
+  return data.dag_runs ?? [];
+}
+
+export async function getDagRuns(dagId: string, limit = 25): Promise<AirflowDagRun[]> {
+  const data = await fetchJson<{ dag_runs: AirflowDagRun[] }>(
+    `/api/airflow/dags/${encodeURIComponent(dagId)}/dagRuns?limit=${limit}&order_by=-run_after`
+  );
+  return data.dag_runs ?? [];
+}
+
+export async function getDagTasks(dagId: string): Promise<AirflowTask[]> {
+  const data = await fetchJson<{ tasks: AirflowTask[] }>(
+    `/api/airflow/dags/${encodeURIComponent(dagId)}/tasks`
+  );
+  return data.tasks ?? [];
+}
+
+export async function getImportErrors(): Promise<AirflowImportError[]> {
+  const data = await fetchJson<{ import_errors: AirflowImportError[] }>("/api/airflow/importErrors");
+  return data.import_errors ?? [];
+}
+
+// --- Auth ---
+
+export async function getSessionUser(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/auth/session");
+    const data = await res.json();
+    return data.user ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function logout(): Promise<void> {
+  await fetch("/api/auth/logout", { method: "POST" });
 }
