@@ -29,10 +29,14 @@ refresh the relevant row does not merge.
 
 | Component | Version | Failure | Held by |
 |-----------|---------|---------|---------|
-| Delta | 4.3.0 | NPE through the UC Spark connector (`AbstractDeltaCatalogClient` reads a null catalog-options map) | `version-matrix.yml` (`fail` leg) |
-| Delta | 4.2.0 | cannot do catalog-managed Delta via the UC 0.5.x connector | `version-matrix.yml` (`fail` leg) |
+| Delta | 4.2.0 | cannot do catalog-managed Delta via the UC 0.5.x connector: a location-less create is rejected with UC `400 INVALID_ARGUMENT ... Invalid type_json` (I-45) | `version-matrix.yml` (`fail` leg, asserts that signature) |
 | Delta | 4.0.x | `NoSuchMethodError` on `org.apache.spark.internal.LogKey` (ABI mismatch on Spark 4.1) | I-02 rationale (add a matrix leg to enforce) |
 | UC connector | 0.3.0 | pre-catalog-managed; no managed-Delta write path | `verify-versions.sh` forbidden set (T0) |
 
 > A `fail` leg that starts passing is itself a build failure: it means the
 > rationale above is stale and must be reconciled here before the pin moves.
+>
+> Delta 4.3.0 used to be listed here as NPE-ing through the UC Spark connector
+> (`AbstractDeltaCatalogClient.fromCatalogOptionsIfEnabled`). Re-measured on
+> 2026-10-26 with the jar set above, it passes I-45 and the other UC gates
+> (I-44, I-42, I-47), so it is no longer held as known-bad. 4.3.1 stays the pin.
