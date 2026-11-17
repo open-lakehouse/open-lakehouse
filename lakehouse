@@ -475,7 +475,7 @@ is_service_healthy() {
 
 # Check Airflow health via API
 is_airflow_healthy() {
-    curl -s --connect-timeout 2 http://localhost:8085/health 2>/dev/null | grep -q '"healthy"'
+    curl -sf --connect-timeout 2 --max-time 5 http://localhost:8085/api/v2/monitor/health 2>/dev/null | python3 "$PROJECT_ROOT/scripts/tools/check-airflow-health.py"
 }
 
 # Check if container is running (silent, returns 0/1)
@@ -581,6 +581,7 @@ cmd_status_human() {
     check_container "$airflow_web_ct" && check_service airflow 8085 "Airflow UI" || true
     check_container "$airflow_sched_ct" || true
     check_container "$airflow_trig_ct" || true
+    check_container "$(resolve_container_name airflow-dag-processor)" || true
 
     echo -e "\n${YELLOW}MLflow:${NC}"
     check_container "$mlflow_ct" && check_service mlflow 5000 "MLflow Tracking" || true
@@ -879,9 +880,9 @@ PY
             mkdir -p logs/airflow
             overlay_set_compose_args airflow || return 1
             docker compose "${OVERLAY_COMPOSE_ARGS[@]}" up -d --build
-            wait_for_service "Airflow" "curl -s http://localhost:8085/health" 120
+            wait_for_service "Airflow" "curl -sf --max-time 5 http://localhost:8085/api/v2/monitor/health | python3 \"$PROJECT_ROOT/scripts/tools/check-airflow-health.py\"" 180
             echo -e "${GREEN}Airflow UI available at: http://localhost:8085${NC}"
-            echo -e "${YELLOW}Default credentials: admin/admin (change in .env)${NC}"
+            echo -e "${YELLOW}Credentials: AIRFLOW_ADMIN_USER / AIRFLOW_ADMIN_PASSWORD in .env${NC}"
             ;;
     esac
 
@@ -1061,9 +1062,10 @@ cmd_logs() {
         airflow-webserver|airflow-web)    docker logs -f "$(resolve_container_name airflow-webserver)" ;;
         airflow-scheduler|airflow-sched)  docker logs -f "$(resolve_container_name airflow-scheduler)" ;;
         airflow-triggerer)                docker logs -f "$(resolve_container_name airflow-triggerer)" ;;
+        airflow-dag-processor)            docker logs -f "$(resolve_container_name airflow-dag-processor)" ;;
         dashboard)        docker logs -f "$(resolve_container_name dashboard)" ;;
         *)
-            echo "Usage: lakehouse logs [postgres|seaweedfs|spark-master|spark-worker|spark-connect|kafka|zookeeper|unity-catalog|mlflow|airflow-webserver|airflow-scheduler|airflow-triggerer|dashboard]"
+            echo "Usage: lakehouse logs [postgres|seaweedfs|spark-master|spark-worker|spark-connect|kafka|zookeeper|unity-catalog|mlflow|airflow-webserver|airflow-scheduler|airflow-triggerer|airflow-dag-processor|dashboard]"
             exit 1
             ;;
     esac
@@ -1186,8 +1188,8 @@ cmd_test() {
 
     echo -e "\n${YELLOW}6. Testing Airflow (optional)...${NC}"
     if docker ps --format '{{.Names}}' | grep -q "^${aflow_web_ctr}$"; then
-        if curl -s --connect-timeout 5 http://localhost:8085/health | grep -q '"healthy"'; then
-            echo -e "   ${GREEN}✓${NC} Airflow webserver healthy"
+        if is_airflow_healthy; then
+            echo -e "   ${GREEN}✓${NC} Airflow API, database, scheduler, triggerer and DAG processor healthy"
             if docker ps --format '{{.Names}}' | grep -q "^${aflow_sched_ctr}$"; then
                 echo -e "   ${GREEN}✓${NC} Airflow scheduler running"
             else
@@ -1195,7 +1197,7 @@ cmd_test() {
                 ((failures++))
             fi
         else
-            echo -e "   ${RED}✗${NC} Airflow webserver not responding"
+            echo -e "   ${RED}✗${NC} Airflow is not fully healthy"
             echo -e "   ${YELLOW}→ Check: docker logs ${aflow_web_ctr}${NC}"
             ((failures++))
         fi
@@ -1972,7 +1974,7 @@ quiesce_containers_for() {
         kafka)         echo "$(resolve_container_name kafka) $(resolve_container_name zookeeper)" ;;
         unity-catalog) resolve_container_name unity-catalog ;;
         mlflow)        resolve_container_name mlflow ;;
-        airflow)       echo "$(resolve_container_name airflow-webserver) $(resolve_container_name airflow-scheduler) $(resolve_container_name airflow-triggerer)" ;;
+        airflow)       echo "$(resolve_container_name airflow-webserver) $(resolve_container_name airflow-scheduler) $(resolve_container_name airflow-triggerer) $(resolve_container_name airflow-dag-processor)" ;;
         notebooks)     resolve_container_name jupyter ;;
         sharing)       resolve_container_name delta-sharing ;;
     esac
@@ -2356,7 +2358,7 @@ backup_writer_containers() {
     # absent from the running set are skipped (is_container_running is false).
     for c in spark-master-41 spark-worker-41 spark-connect-41 kafka zookeeper \
              unity-catalog mlflow spark-mlflow-agent jupyter \
-             airflow-webserver airflow-scheduler airflow-triggerer; do
+             airflow-webserver airflow-scheduler airflow-triggerer airflow-dag-processor; do
         resolve_container_name "$c"
     done
 }
@@ -3069,7 +3071,7 @@ cmd_resolve() {
 
     local c
     for c in spark-master-41 spark-worker-41 spark-connect-41 kafka zookeeper \
-             unity-catalog airflow-webserver airflow-scheduler airflow-triggerer \
+             unity-catalog airflow-webserver airflow-scheduler airflow-triggerer airflow-dag-processor \
              mlflow jupyter dashboard; do
         echo "container.${c}=$(resolve_container_name "$c")"
     done

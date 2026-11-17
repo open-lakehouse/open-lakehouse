@@ -52,6 +52,7 @@ BASE_SERVICES = {
         "airflow-webserver",
         "airflow-scheduler",
         "airflow-triggerer",
+        "airflow-dag-processor",
     ],
     "mlflow": ["mlflow", "mlflow-agent"],
     "notebooks": ["jupyter"],
