@@ -15,7 +15,7 @@ It's made and maintained by **Databricks**, which originated and open-sourced mu
 | Streaming | Apache Kafka | 3.5 |
 | Orchestration | Apache Airflow | 3.1.6 |
 | Open table formats | Apache Iceberg / Delta Lake | 1.10 / 4.3.1 |
-| Catalog | Unity Catalog OSS | 0.5.0 |
+| Catalog | Unity Catalog OSS | 0.6.0 |
 | Experiment tracking | MLflow | 3.14 |
 | Object store | SeaweedFS (S3-compatible) | — |
 | Metastore | PostgreSQL | 16 |

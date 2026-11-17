@@ -69,7 +69,7 @@ Expected stdout snippets, in order:
 - Metadata visible via `DESCRIBE EXTENDED` (columns + location) and the UC REST API
   (type / format / location).
 
-### Notes on UC OSS 0.5.0 behavior
+### Notes on UC OSS 0.6.0 behavior
 
 - **`LOCATION` must use `s3://`**, not `s3a://` — UC credential vending rejects the `s3a` scheme
   (`Unsupported URI scheme: s3a`). Spark still reads/writes the bytes over the `s3a` filesystem.

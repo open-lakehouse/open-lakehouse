@@ -277,7 +277,7 @@ def post(path, body):
     r = urllib.request.Request(api + path, data=json.dumps(body).encode(),
         headers={{"Content-Type": "application/json"}}, method="POST")
     urllib.request.urlopen(r, timeout=10)
-# UC 0.5.0 validates the column type descriptor — an empty type_json 400s.
+# UC 0.6.0 validates the column type descriptor — an empty type_json 400s.
 tj = json.dumps({{"name": "id", "type": "integer", "nullable": True, "metadata": {{}}}})
 post("/catalogs", {{"name": "{CAT}"}})
 post("/schemas", {{"name": "{SCH}", "catalog_name": "{CAT}"}})

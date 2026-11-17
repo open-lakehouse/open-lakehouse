@@ -119,7 +119,7 @@ SELECT * FROM uc.bronze.orders LIMIT 10;
 
 The same `iceberg.bronze.orders` table is visible to Spark (via the JVM client) and DuckDB (via the REST client). One catalog, two engines, no data movement.
 
-## Limitations of UC OSS 0.5.0
+## Limitations of UC OSS 0.6.0
 
 - Auth providers (OAuth, SAML) are partial. Local demos run without auth.
 - The Delta-native API surface is read-mostly. Full Delta DML still goes through Spark.
