@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import JupyterLaunchButton from "@/components/jupyter-launch-button";
 import { Rocket, X, CheckCircle2, Circle, ExternalLink } from "lucide-react";
 
 const STORAGE_KEY = "lakehouse-onboarding-dismissed";
@@ -19,6 +20,7 @@ interface Step {
   done: boolean;
   href?: string;
   external?: boolean;
+  jupyter?: boolean;
 }
 
 export function OnboardingResetButton() {
@@ -64,8 +66,9 @@ export default function Onboarding({ allServicesHealthy }: OnboardingProps) {
     {
       label: "Open Jupyter & run a starter notebook",
       detail: "Launch Jupyter to create your first table",
-      href: "http://localhost:8889",
+      href: "/jupyter",
       external: true,
+      jupyter: true,
       done: false,
     },
     {
@@ -113,8 +116,7 @@ export default function Onboarding({ allServicesHealthy }: OnboardingProps) {
       <ol className="space-y-3">
         {steps.map((step, i) => {
           const content = (
-            <li
-              key={i}
+            <div
               className={`flex items-start gap-3 rounded-lg px-3 py-2 transition-colors ${
                 step.href ? "hover:bg-slate-800/50" : ""
               }`}
@@ -134,24 +136,25 @@ export default function Onboarding({ allServicesHealthy }: OnboardingProps) {
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">{step.detail}</p>
               </div>
-            </li>
+            </div>
           );
 
-          if (step.href && step.external) {
+          if (step.jupyter) {
             return (
-              <a key={i} href={step.href} target="_blank" rel="noopener noreferrer" className="block">
-                {content}
-              </a>
+              <li key={i}><JupyterLaunchButton className="block w-full text-left">{content}</JupyterLaunchButton></li>
             );
+          }
+          if (step.href && step.external) {
+            return <li key={i}><a href={step.href} target="_blank" rel="noopener noreferrer">{content}</a></li>;
           }
           if (step.href) {
             return (
-              <Link key={i} href={step.href} className="block">
+              <li key={i}><Link href={step.href} className="block">
                 {content}
-              </Link>
+              </Link></li>
             );
           }
-          return <div key={i}>{content}</div>;
+          return <li key={i}>{content}</li>;
         })}
       </ol>
 
