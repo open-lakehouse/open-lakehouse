@@ -181,46 +181,69 @@ class TestCISecurityConfig:
 
         Per GitHub's own guidance, major-version tags (@v4) from first-party
         publishers (actions/*, github/*) are acceptable. Floating refs like
-        @main or @master are not.
+        @main or @master are not. Scans every workflow file. Local composite
+        actions (`uses: ./…`) are in-repo at the checked-out commit — pinned by
+        definition, no @ref to check.
         """
-        ci_path = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
-        if not ci_path.exists():
-            pytest.skip("CI workflow not found")
+        workflows_dir = PROJECT_ROOT / ".github" / "workflows"
+        if not workflows_dir.exists():
+            pytest.skip("no workflows directory")
 
-        content = ci_path.read_text()
-        uses_lines = [line for line in content.split("\n") if "uses:" in line]
+        wf_files = sorted(workflows_dir.glob("*.yml")) + sorted(
+            workflows_dir.glob("*.yaml")
+        )
+        assert wf_files, "expected at least one workflow file to scan"
 
-        for line in uses_lines:
-            # Reject floating refs (no @, or @main / @master / @latest)
-            assert re.search(
-                r"@[a-zA-Z0-9._-]+", line
-            ), f"Action must be pinned, not floating: {line.strip()}"
-            assert not re.search(
-                r"@(main|master|latest|HEAD)\b", line
-            ), f"Action pinned to floating ref: {line.strip()}"
+        for wf in wf_files:
+            for line in wf.read_text().split("\n"):
+                if "uses:" not in line:
+                    continue
+                # Local composite actions live in-repo — pinned by definition.
+                if re.search(r"uses:\s*\./", line):
+                    continue
+                # Reject floating refs (no @, or @main / @master / @latest)
+                assert re.search(
+                    r"@[a-zA-Z0-9._-]+", line
+                ), f"Action must be pinned, not floating in {wf.name}: {line.strip()}"
+                assert not re.search(
+                    r"@(main|master|latest|HEAD)\b", line
+                ), f"Action pinned to floating ref in {wf.name}: {line.strip()}"
 
     @pytest.mark.security
     def test_no_third_party_actions_unpinned(self):
-        """Third-party (non-actions/*, non-github/*) actions MUST be SHA-pinned."""
-        ci_path = PROJECT_ROOT / ".github" / "workflows" / "ci.yml"
-        if not ci_path.exists():
-            pytest.skip("CI workflow not found")
+        """Third-party (non-actions/*, non-github/*) actions MUST be SHA-pinned.
 
-        content = ci_path.read_text()
-        uses_lines = [line.strip() for line in content.split("\n") if "uses:" in line]
+        Scans EVERY workflow file, not just ci.yml — a ci.yml-only check let an
+        unpinned `softprops/action-gh-release@v2` (running with contents: write)
+        sit in release.yml unnoticed. Local composite actions (`uses: ./...`)
+        have no @ref and are skipped by the regex.
+        """
+        workflows_dir = PROJECT_ROOT / ".github" / "workflows"
+        if not workflows_dir.exists():
+            pytest.skip("no workflows directory")
 
-        for line in uses_lines:
-            m = re.search(r"uses:\s*([^@\s]+)@(\S+)", line)
-            if not m:
-                continue
-            action, ref = m.group(1), m.group(2)
-            # First-party publishers are allowed major-version tags
-            if action.startswith(("actions/", "github/")):
-                continue
-            # Third-party: require 40-char SHA
-            assert re.fullmatch(
-                r"[a-f0-9]{40}", ref
-            ), f"Third-party action must be SHA-pinned: {line}"
+        wf_files = sorted(workflows_dir.glob("*.yml")) + sorted(
+            workflows_dir.glob("*.yaml")
+        )
+        assert wf_files, "expected at least one workflow file to scan"
+
+        unpinned = []
+        for wf in wf_files:
+            for line in wf.read_text().split("\n"):
+                if "uses:" not in line:
+                    continue
+                m = re.search(r"uses:\s*([^@\s]+)@(\S+)", line)
+                if not m:
+                    continue
+                action, ref = m.group(1), m.group(2)
+                # First-party publishers are allowed major-version tags.
+                if action.startswith(("actions/", "github/")):
+                    continue
+                # Third-party: require a 40-char commit SHA.
+                if not re.fullmatch(r"[a-f0-9]{40}", ref):
+                    unpinned.append(f"{wf.name}: {line.strip()}")
+
+        assert not unpinned, f"Third-party actions must be SHA-pinned: {unpinned}"
 
     @pytest.mark.security
     def test_ci_has_permissions_block(self):
