@@ -28,15 +28,15 @@ docker exec -it kafka kafka-console-consumer --topic orders \
 
 ## Connector jar + bootstrap on this stack
 
-Spark's Kafka SQL connector is **not bundled** in `apache/spark:4.1.0`. The
-canonical `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.0`
+Spark's Kafka SQL connector is **not bundled** in `apache/spark:4.1.3`. The
+canonical `spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.1.3`
 fails on this image because Ivy can't write to `/nonexistent` (the `spark`
 user's `home` per `/etc/passwd`). The fix is to pre-download:
 
 | File | Used by |
 |------|---------|
-| `spark-sql-kafka-0-10_2.13-4.1.0.jar` | Spark SQL Kafka source/sink |
-| `spark-token-provider-kafka-0-10_2.13-4.1.0.jar` | runtime dep |
+| `spark-sql-kafka-0-10_2.13-4.1.3.jar` | Spark SQL Kafka source/sink |
+| `spark-token-provider-kafka-0-10_2.13-4.1.3.jar` | runtime dep |
 | `kafka-clients-3.9.0.jar` | runtime dep |
 | `commons-pool2-2.12.0.jar` | runtime dep |
 

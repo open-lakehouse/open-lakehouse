@@ -1,7 +1,7 @@
 # JupyterLab on Apache Spark 4.1 (Python 3, Java 21)
 # Matches the Spark 4.1 runtime used by the rest of the stack so notebooks
 # can execute pyspark 4.1 features (SDP, VARIANT, RTM, etc.) in local mode.
-FROM apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+FROM apache/spark:4.1.3-scala2.13-java21-python3-r-ubuntu
 
 USER root
 
@@ -28,14 +28,14 @@ RUN set --; \
     pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
       --upgrade "pip>=24.0" setuptools wheel
 # jupyterlab + pyspark, plus the Python deps `spark-pipelines` (the SDP CLI)
-# imports — the stock apache/spark:4.1.0 image ships none of these, so without
+# imports — the stock apache/spark:4.1.3 image ships none of these, so without
 # them `pyspark/pipelines/cli.py` fails with ModuleNotFoundError (§1.6, T-1.13).
 RUN set --; \
     if [ -n "$PIP_TRUSTED_HOST" ]; then set -- --trusted-host "$PIP_TRUSTED_HOST"; fi; \
     pip install --no-cache-dir --index-url "$PIP_INDEX_URL" "$@" \
       jupyterlab==4.3.0 \
       ipykernel==6.29.5 \
-      pyspark==4.1.0 \
+      pyspark==4.1.3 \
       pandas==2.2.3 \
       pyarrow==18.1.0 \
       matplotlib==3.9.2 \
