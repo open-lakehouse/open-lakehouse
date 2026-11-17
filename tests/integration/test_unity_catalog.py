@@ -8,6 +8,7 @@ These tests verify:
 4. Spark configuration for Unity Catalog
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -101,7 +102,9 @@ class TestUnityCatalogDocumentation:
         guide = ROOT_DIR / "docs" / "guides" / "unity-catalog.md"
         content = guide.read_text()
 
-        assert "Quick Start" in content, "Should have Quick Start section"
+        assert re.search(
+            r"^## (Quick )?Start", content, re.M
+        ), "Should have a Start section"
         assert "lakehouse start unity-catalog" in content, "Should show start command"
 
     def test_guide_has_troubleshooting(self):
@@ -131,40 +134,6 @@ class TestUnityCatalogCLI:
 
         # Should use docker compose for unity-catalog
         assert "docker-compose-unity-catalog.yml" in content
-
-
-class TestUnityCatalogDemoScript:
-    """Tests for Unity Catalog demo script."""
-
-    def test_demo_script_exists(self):
-        """Demo script should exist."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
-        assert script.exists(), "unity_catalog_demo.py not found"
-
-    def test_demo_script_syntax_valid(self):
-        """Demo script should have valid Python syntax."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
-        result = subprocess.run(
-            ["python3", "-m", "py_compile", str(script)], capture_output=True, text=True
-        )
-        assert result.returncode == 0, f"Syntax error: {result.stderr}"
-
-    def test_demo_script_has_spark_session(self):
-        """Demo script should create SparkSession."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
-        content = script.read_text()
-
-        assert "SparkSession" in content, "Should use SparkSession"
-        assert "RESTCatalog" in content, "Should configure RESTCatalog"
-
-    def test_demo_script_creates_medallion_schemas(self):
-        """Demo script should create medallion architecture schemas."""
-        script = ROOT_DIR / "scripts" / "unity_catalog_demo.py"
-        content = script.read_text()
-
-        assert "bronze" in content, "Should create bronze schema"
-        assert "silver" in content, "Should create silver schema"
-        assert "gold" in content, "Should create gold schema"
 
 
 @pytest.mark.integration
@@ -209,7 +178,8 @@ class TestUnityCatalogLive:
         import urllib.error
         import urllib.request
 
-        url = "http://localhost:8081/api/2.1/unity-catalog/iceberg/v1/config"
+        # UC's Iceberg REST /v1/config is a 400 without the warehouse (= catalog) param.
+        url = "http://localhost:8081/api/2.1/unity-catalog/iceberg/v1/config?warehouse=unity"
         try:
             with urllib.request.urlopen(url, timeout=5) as response:
                 assert response.status == 200

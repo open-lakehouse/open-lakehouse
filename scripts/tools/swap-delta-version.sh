@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # swap-delta-version.sh — put a specific Delta build on the live Spark classpath,
 # so the T4 version-change matrix can prove the GOOD pin passes and the KNOWN-BAD
-# pins fail the way docs/testing.md says they do (Delta 4.3.0 → UC-connector NPE;
-# 4.2.0 → no catalog-managed Delta; 4.0.x → LogKey NoSuchMethodError).
+# pins fail the way docs/testing.md says they do (Delta 4.2.0 → no catalog-managed
+# Delta; 4.0.x → LogKey NoSuchMethodError).
 #
 # It edits the *live, gitignored* config/spark/spark-defaults.conf only — never a
 # tracked file — so a CI runner can rehearse a bad version and throw the tree away.

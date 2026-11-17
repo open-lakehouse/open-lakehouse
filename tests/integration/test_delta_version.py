@@ -3,8 +3,8 @@
     I-02  Delta 4.3.1 on Spark 4.1.0 / Java 21: write + append + read +
           time-travel via the stack's configured jars, with no ABI break
           (NoSuchMethodError / AbstractMethodError). Also pins the version:
-          the stack runs Delta 4.3.1 (4.3.0 NPEs through the UC connector;
-          4.2.0 can't do catalog-managed Delta).
+          the stack runs Delta 4.3.1 (4.2.0 can't do catalog-managed Delta,
+          held by I-45 in the version matrix).
 
 Runs inside spark-master-41 (which mounts the pinned jars and spark-defaults),
 so it exercises the exact classpath the stack ships. Skips when the container
