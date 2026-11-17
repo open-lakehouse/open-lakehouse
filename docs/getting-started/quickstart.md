@@ -8,8 +8,7 @@ You need these installed:
 - Docker & Docker Compose 2.24+ (the `env_file` `required:` field needs 2.24.0)
 - Python 3.10+
 - Poetry
-- PostgreSQL 16 (running)
-- SeaweedFS (running)
+- Docker daemon running (PostgreSQL and SeaweedFS run in Compose)
 
 > Don't have these? See [Installation Guide](installation.md) for setup instructions.
 
@@ -17,10 +16,14 @@ You need these installed:
 
 ```bash
 # Clone the repo
-git clone https://github.com/lisancao/lakehouse-at-home.git
-cd lakehouse-at-home
+git clone https://github.com/open-lakehouse/open-lakehouse.git
+cd open-lakehouse
 
-# Run automated setup
+# Generate credentials before storage is initialized
+./lakehouse setup --credentials-only
+./lakehouse start storage
+
+# Download dependencies and provision the database
 ./lakehouse setup
 ```
 
@@ -32,15 +35,10 @@ The setup command will:
 
 ## Configure
 
-Edit the generated config files with your credentials:
-
-```bash
-# Database and S3 credentials
-nano .env
-
-# Spark configuration
-nano config/spark/spark-defaults.conf
-```
+Setup generates private credentials and aligns Spark and Unity Catalog S3 settings.
+Existing values are preserved; manual credential edits are unnecessary for a fresh
+local installation. See [automatic local credentials](../guides/local-credentials.md)
+for recovering an existing installation or configuring external storage.
 
 ## Start
 
