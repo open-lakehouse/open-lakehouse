@@ -59,9 +59,9 @@ JAR_LIST=(
     "postgresql-42.7.4.jar|${MAVEN_BASE_URL}/org/postgresql/postgresql/42.7.4/postgresql-42.7.4.jar|1000000"
     # Delta 4.3.1 — ABI-verified on Spark 4.1/Java21 (I-02) and required for
     # catalog-managed Delta via the UC 0.5.x connector family below. NOTE:
-    # 4.3.0 NPEs through the UC Spark connector (AbstractDeltaCatalogClient reads a
-    # null catalog-options map); 4.3.1 fixes it. 4.0.x breaks with NoSuchMethodError
-    # on org.apache.spark.internal.LogKey — do not downgrade.
+    # 4.2.0 cannot do catalog-managed Delta (version-matrix.yml holds it); 4.0.x
+    # breaks with NoSuchMethodError on org.apache.spark.internal.LogKey — do not
+    # downgrade.
     "delta-spark_2.13-4.3.1.jar|${MAVEN_BASE_URL}/io/delta/delta-spark_2.13/4.3.1/delta-spark_2.13-4.3.1.jar|8000000"
     "delta-storage-4.3.1.jar|${MAVEN_BASE_URL}/io/delta/delta-storage/4.3.1/delta-storage-4.3.1.jar|70000"
     # Unity Catalog OSS Spark connector family (0.5.x). The connector lets Spark

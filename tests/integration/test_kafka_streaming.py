@@ -90,28 +90,19 @@ class TestSparkKafkaStreaming:
     """Test Spark Structured Streaming with Kafka."""
 
     @pytest.fixture
-    def spark_with_kafka(self, kafka_container):
-        """Create SparkSession configured for Kafka streaming."""
-        from pyspark.sql import SparkSession
+    def spark_with_kafka(self, spark_local, local_jars, kafka_container):
+        """The shared SparkSession plus the Kafka bootstrap address.
 
-        bootstrap_servers = kafka_container.get_bootstrap_server()
-
-        spark = (
-            SparkSession.builder.appName("lakehouse-kafka-tests")
-            .master("local[2]")
-            .config("spark.driver.memory", "1g")
-            .config("spark.sql.shuffle.partitions", "2")
-            .config("spark.ui.enabled", "false")
-            .config(
-                "spark.jars.packages",
-                "org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1",
+        The Kafka connector is loaded into the session-scoped ``spark_local``
+        (conftest) from jars/. A separate builder here would just get the
+        existing JVM session back from getOrCreate() without the connector,
+        and stopping it would kill the session for every later test.
+        """
+        if "kafka" not in local_jars:
+            pytest.skip(
+                "spark-sql-kafka jar not in jars/ (run scripts/tools/download-jars.sh)"
             )
-            .getOrCreate()
-        )
-
-        spark.sparkContext.setLogLevel("ERROR")
-        yield spark, bootstrap_servers
-        spark.stop()
+        return spark_local, kafka_container.get_bootstrap_server()
 
     def test_read_kafka_batch(self, spark_with_kafka, kafka_container):
         """Test reading Kafka topic in batch mode."""

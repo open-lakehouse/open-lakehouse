@@ -23,7 +23,7 @@ driver). Not the standalone Connect server.
 - UC OSS image `unitycatalog/unitycatalog:v0.5.0` (set in `docker-compose-unity-catalog.yml`).
 - **Delta 4.3.1 + the UC 0.5.x Spark connector family** (connector 0.4.1 +
   client 0.5.1 + hadoop 0.5.1) — wired in `config/spark/spark-defaults.conf`.
-  Catalog-managed Delta does NOT work on Delta 4.2.0/4.3.0 or older connectors.
+  Catalog-managed Delta does NOT work on Delta 4.2.0 or older connectors.
 - `config/spark/spark-defaults.conf` registers `spark.sql.catalog.managed_demo`
   as `UCSingleCatalog` (alongside `unity`).
 - The **`managed_demo` catalog must exist with a `storage_root`** and the
@@ -138,8 +138,8 @@ All covered in detail in
 [`.claude/skills/sdp/unity-catalog.md`](../../.claude/skills/sdp/unity-catalog.md):
 
 - **Catalog-managed Delta needs the exact versions** — Delta 4.3.1 + the UC 0.5.x
-  connector family. On 4.2.0 a location-less create falls back to `spark_catalog`;
-  on 4.3.0 the connector NPEs.
+  connector family. On 4.2.0 UC rejects a location-less create (`Invalid
+  type_json`).
 - **Required table properties** — every catalog-managed table must set
   `delta.feature.catalogManaged=supported` **and** both
   `delta.checkpoint.writeStatsAsJson=true` / `...writeStatsAsStruct=true`, or UC's
