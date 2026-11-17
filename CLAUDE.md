@@ -64,7 +64,7 @@ For the full deterministic runbook, see `.claude/skills/lakehouse-lifecycle/star
 
 - Spark 4.1.0 (Scala 2.13, Java 21)
 - Iceberg 1.10.0
-- Delta 4.3.1 (ABI-verified on Spark 4.1/Java21 via I-02; required for catalog-managed Delta. 4.3.0 NPEs through the UC connector — use 4.3.1; 4.0.x breaks — ABI mismatch)
+- Delta 4.3.1 (ABI-verified on Spark 4.1/Java21 via I-02; catalog-managed Delta via I-45. 4.2.0 can't do catalog-managed Delta; 4.3.0 was recorded as NPE-ing through the UC connector but passes every UC gate on the current jar set (re-measured 2026-10-26), 4.3.1 stays the pin; 4.0.x breaks — ABI mismatch)
 - Airflow 3.1.6
 - Unity Catalog OSS 0.5.0 (`unitycatalog/unitycatalog:v0.5.0` — official image; catalog-managed Delta. v0.5.1 has no container yet)
 - Unity Catalog Spark connector family 0.5.x: `unitycatalog-spark_2.13` 0.4.1 (newest published) + `unitycatalog-client` 0.5.1 + `unitycatalog-hadoop` 0.5.1 (this set unlocks catalog-managed Delta on Delta 4.3.1)

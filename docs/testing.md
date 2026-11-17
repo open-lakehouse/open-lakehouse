@@ -16,7 +16,7 @@ guarantee here, the change is wrong, not the standard.
 1. **A pin is a tested claim, never a comment.** No jar/image/package version is
    "known good" until a test exercises the exact artifact on the exact runtime
    and asserts the behavior the pin exists to protect. The rationale for a pin
-   (e.g. "Delta 4.3.0 NPEs through the UC connector") must exist as an
+   (e.g. "Delta 4.2.0 cannot do catalog-managed Delta") must exist as an
    *executable negative test*, so the reason survives after everyone who
    remembers it has moved on.
 2. **A skip is a failure on the gated path.** `pytest.skip` when the stack is
@@ -61,15 +61,17 @@ not evidence.
    is named consistently across `download-jars.sh`, `spark-defaults.conf.example`,
    and `CLAUDE.md`, and that no forbidden version or JDBC-catalog path leaked in.
    Runs with no Docker; also catches a drifted *live* `spark-defaults.conf`.
-2. **The positive gate runs and passes.** `tests/integration/test_delta_version.py`
-   (and its siblings per layer) exercise write → append → read → time-travel on
-   the candidate classpath and fail on `NoSuchMethodError`/`AbstractMethodError`.
-   On this path the test **must not skip** — a skip fails the job.
-3. **The negative gate holds.** The matrix runs the known-bad version and asserts
-   it still fails the way the pin says it does (Delta 4.3.0 → UC-connector NPE;
-   Delta 4.2.0 → no catalog-managed Delta). If a "bad" version starts passing,
-   the pin's rationale is stale and must be re-documented — that is also a
-   failure until a human reconciles it.
+2. **The positive gate runs and passes.** On the candidate classpath, I-02
+   (`tests/integration/test_delta_version.py`) exercises write → append → read →
+   time-travel and fails on `NoSuchMethodError`/`AbstractMethodError`, and I-45
+   exercises catalog-managed Delta through Unity Catalog, which is what the pin
+   protects. On this path neither test **may skip**; a skip fails the job.
+3. **The negative gate holds, for the recorded reason.** The matrix runs the
+   known-bad version and asserts that I-02 still passes and I-45 fails with the
+   measured signature (Delta 4.2.0 → UC `Invalid type_json` on a catalog-managed
+   create). A bad version that fails for a different reason is red too. If a
+   "bad" version starts passing, the pin's rationale is stale and must be
+   re-documented; that is also a failure until a human reconciles it.
 4. **The compatibility matrix is updated from the run**, not by hand
    (`docs/compatibility.md`), so the published support statement is generated
    evidence.
@@ -89,8 +91,9 @@ Spark 4.1.0 (Scala 2.13 / Java 21) · Delta 4.3.1 · Iceberg 1.10.0 · UC OSS 0.
 (Spark connector 0.4.1 + client 0.5.1 + hadoop 0.5.1) · MLflow 3.14 · Kafka
 (cp-kafka 7.5.0 = Apache 3.5) · AWS SDK v2 2.24.6 · PostgreSQL 16.
 
-Known-bad, held by negative tests: Delta 4.3.0 (UC-connector NPE), Delta 4.2.0
-(no catalog-managed Delta), UC connector 0.3.0 (pre-catalog-managed).
+Known-bad, held by negative tests: Delta 4.2.0 (no catalog-managed Delta), UC
+connector 0.3.0 (pre-catalog-managed). Delta 4.3.0 was dropped from this list on
+2026-10-26: it no longer fails any UC gate (see `docs/compatibility.md`).
 
 ## Supply chain
 

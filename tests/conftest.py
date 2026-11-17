@@ -1,9 +1,40 @@
 """Pytest configuration and shared fixtures for lakehouse-stack tests."""
 
+import glob
 import os
 
 import pytest
 from pyspark.sql import SparkSession
+
+# One JVM per pytest process: whichever fixture calls getOrCreate() first owns
+# the classpath, and every later builder gets that session back. So the pinned
+# jars from jars/ (download-jars.sh) go on at JVM launch, where every builder in
+# the process inherits them, instead of on any one fixture's spark.jars.
+_JARS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "jars"
+)
+_JAR_GLOBS = (
+    "iceberg-spark-runtime-*.jar",
+    "spark-sql-kafka-0-10_*.jar",
+    "spark-token-provider-kafka-0-10_*.jar",
+    "kafka-clients-*.jar",
+    "commons-pool2-*.jar",
+)
+
+
+def _pinned_jars() -> list:
+    found = []
+    for pattern in _JAR_GLOBS:
+        matches = sorted(glob.glob(os.path.join(_JARS_DIR, pattern)))
+        if matches:
+            found.append(matches[-1])
+    return found
+
+
+if "PYSPARK_SUBMIT_ARGS" not in os.environ:
+    _jars = _pinned_jars()
+    if _jars:
+        os.environ["PYSPARK_SUBMIT_ARGS"] = f"--jars {','.join(_jars)} pyspark-shell"
 
 
 @pytest.fixture(scope="session")

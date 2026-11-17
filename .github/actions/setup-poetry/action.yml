@@ -26,10 +26,19 @@ runs:
       run: pipx install poetry==2.1.0
 
     - name: Set up Python (with Poetry cache)
+      id: python
       uses: actions/setup-python@v6
       with:
         python-version: ${{ inputs.python-version }}
         cache: poetry
+
+    # pipx installs Poetry on the runner's default Python (3.14 on the
+    # Ubuntu 26.04 image), and Poetry then builds the project env on that
+    # interpreter: pyarrow has no cp314 wheel at our pin and the source build
+    # fails. Point the env at the interpreter setup-python just installed.
+    - name: Use the pinned Python for the project env
+      shell: bash
+      run: poetry env use "${{ steps.python.outputs.python-path }}"
 
     - name: Install dependencies
       shell: bash
