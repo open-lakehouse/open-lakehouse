@@ -11,10 +11,16 @@ This guide covers configuring the lakehouse stack for your environment.
 
 ## Environment Variables (.env)
 
-Create from the template:
+Generate local credentials with Docker running:
+
 ```bash
-cp .env.example .env
+./lakehouse setup --credentials-only
 ```
+
+Existing values are preserved. The S3 keys below illustrate the old demo defaults;
+fresh setup generates random keys instead. See [automatic local credentials](../guides/local-credentials.md)
+for private file permissions, recovery and service configuration. For external
+storage, copy `.env.example` and supply its existing credentials before setup.
 
 ### Required Variables
 
