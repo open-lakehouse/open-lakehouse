@@ -1,7 +1,7 @@
 # JupyterLab for running workshop notebooks against Spark 4.1.
 #
 # Builds a local image (docker/jupyter/Dockerfile) that layers JupyterLab
-# on top of apache/spark:4.1.0 so the Spark runtime inside the notebook
+# on top of apache/spark:4.1.3 so the Spark runtime inside the notebook
 # matches the rest of the stack (SDP, VARIANT, Real-Time Mode, etc.).
 #
 # Usage:
@@ -23,7 +23,7 @@ services:
       args:
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
         PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
-    image: lakehouse-jupyter:spark-4.1.0
+    image: lakehouse-jupyter:spark-4.1.3
     container_name: jupyter
     user: root
     ports:

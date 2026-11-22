@@ -48,7 +48,7 @@ Expected: `All preflight checks passed`. This verifies PostgreSQL is reachable, 
 ./lakehouse start airflow      # optional, only if demoing orchestration
 ```
 
-`start all` now brings up the **Spark Connect server** (container `spark-connect-41`, gRPC on port 15002) alongside the master and worker. First start pulls `spark-connect_2.13:4.1.0` from Maven on the connect container — that adds ~30s. Subsequent starts hit the local Ivy cache.
+`start all` now brings up the **Spark Connect server** (container `spark-connect-41`, gRPC on port 15002) alongside the master and worker. First start pulls `spark-connect_2.13:4.1.3` from Maven on the connect container — that adds ~30s. Subsequent starts hit the local Ivy cache.
 
 Order matters: Spark and Kafka can start in parallel; Unity Catalog should be up before any Spark job that talks to the catalog; Airflow depends on Postgres which is external (system PostgreSQL on port 5432).
 

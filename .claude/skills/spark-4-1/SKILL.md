@@ -5,7 +5,7 @@ description: Apache Spark 4.1 reference. Load when writing PySpark/Spark SQL aga
 
 # Spark 4.1 reference
 
-This stack runs Apache Spark **4.1.0** on Scala 2.13 with Java 21 in **Connect-first** mode. The cluster master is `spark-master-41` (port 7078, UI 8082) and the Connect server is `spark-connect-41` (gRPC on 15002). Default client transport is `SparkSession.builder.remote("sc://localhost:15002")`.
+This stack runs Apache Spark **4.1.3** on Scala 2.13 with Java 21 in **Connect-first** mode. The cluster master is `spark-master-41` (port 7078, UI 8082) and the Connect server is `spark-connect-41` (gRPC on 15002). Default client transport is `SparkSession.builder.remote("sc://localhost:15002")`.
 
 ## How to get a SparkSession (Connect-first)
 
@@ -33,7 +33,7 @@ Mounts: `./scripts/` → `/scripts/`, `./jars/` → `/opt/spark/jars-extra/`.
 
 ### spark-submit on this stack — three gotchas
 
-The stock `apache/spark:4.1.0` image has rough edges that bite the first time
+The stock `apache/spark:4.1.3` image has rough edges that bite the first time
 you reach for spark-submit on this cluster. All three are environmental, not
 Spark bugs:
 

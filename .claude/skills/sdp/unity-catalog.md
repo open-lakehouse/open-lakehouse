@@ -120,7 +120,7 @@ docker start spark-connect-41
 
 ## Pre-reqs the base Spark image is missing
 
-`spark-pipelines` imports fail on a stock `apache/spark:4.1.0` image — the CLI
+`spark-pipelines` imports fail on a stock `apache/spark:4.1.3` image — the CLI
 needs Python packages the image doesn't ship:
 
 ```

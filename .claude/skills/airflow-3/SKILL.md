@@ -5,7 +5,7 @@ description: Apache Airflow 3.1 orchestration for this stack. Load when writing 
 
 # Airflow 3.1
 
-This stack runs Airflow 3.1.6 via `docker-compose-airflow.yml`. UI is on `http://localhost:8085` (default admin/admin — change in `.env` for any non-local use). Containers: `airflow-webserver`, `airflow-scheduler`, `airflow-triggerer`, plus a one-shot `airflow-init`.
+This stack runs Airflow 3.3.2 via `docker-compose-airflow.yml`. UI is on `http://localhost:8085` (default admin/admin — change in `.env` for any non-local use). Containers: `airflow-webserver`, `airflow-scheduler`, `airflow-triggerer`, plus a one-shot `airflow-init`.
 
 DAGs live in `dags/`. The directory is mounted into all Airflow containers; new files appear in the UI within ~30s.
 

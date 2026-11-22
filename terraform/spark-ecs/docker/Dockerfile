@@ -6,7 +6,7 @@
 # master / worker / connect roles to Cloud Map service discovery.
 #
 # Built for linux/arm64 to match the Fargate ARM64 runtime (see scripts/terraform/spark-ecr-push.sh).
-FROM apache/spark:4.1.0-scala2.13-java21-python3-r-ubuntu
+FROM apache/spark:4.1.3-scala2.13-java21-python3-r-ubuntu
 
 # Pinned JAR versions — mirror scripts/tools/download-jars.sh and the version
 # pins in CLAUDE.md. Do not bump without testing against Spark 4.1.
@@ -16,7 +16,7 @@ ARG UC_CONNECTOR_VERSION=0.3.0
 ARG HADOOP_AWS_VERSION=3.4.1
 ARG AWS_SDK_V1_VERSION=1.12.780
 ARG AWS_SDK_V2_VERSION=2.24.6
-ARG SPARK_VERSION=4.1.0
+ARG SPARK_VERSION=4.1.3
 ARG SCALA_BINARY=2.13
 
 # Maven mirror (override in restricted networks). Defaults to Maven Central.

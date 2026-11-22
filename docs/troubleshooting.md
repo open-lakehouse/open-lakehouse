@@ -255,7 +255,7 @@ grep "fs.s3a" config/spark/spark-defaults.conf
 
 ### `spark-submit` Fails Before the Job Starts
 
-Three image-level gotchas with the stock `apache/spark:4.1.0` master that
+Three image-level gotchas with the stock `apache/spark:4.1.3` master that
 trip every first-time `spark-submit` on this stack:
 
 | Symptom | Cause | Fix |
