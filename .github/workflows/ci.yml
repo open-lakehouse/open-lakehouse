@@ -57,6 +57,20 @@ jobs:
         # into shipped config. No Docker, no network.
         run: bash scripts/tools/verify-versions.sh --tracked-only
 
+      - name: No AWS account identifiers in tracked files
+        # A real 12-digit account ID in an ECR host, ARN or account-suffixed
+        # bucket name leaks which AWS account runs the demos. Derive it at
+        # deploy time instead. 123456789012 is AWS's documented placeholder.
+        run: |
+          hits="$(git grep -nE '[0-9]{12}\.dkr\.ecr\.|arn:aws[a-z-]*:[a-z0-9-]+:[a-z0-9-]*:[0-9]{12}:|-[0-9]{12}-(us|eu|ap|ca|sa|me|af)[a-z]*[0-9]' \
+            | grep -v '123456789012' || true)"
+          if [ -n "$hits" ]; then
+            echo "::error::AWS account identifier found in tracked files:"
+            echo "$hits"
+            exit 1
+          fi
+          echo "✓ no AWS account identifiers in tracked files"
+
       - name: Validate compose files
         run: |
           for f in docker-compose-*.yml; do

@@ -47,11 +47,10 @@ COPY docker/jupyter-hosted/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Defaults (overridable per task): the SDP demo reads these at runtime.
+# ORDERS_PATH / DIMS_PATH are account-specific, so they are not baked in here:
+# terraform-notebooks sets them per task from its data_bucket.
 ENV PYSPARK_PYTHON=python3 PYSPARK_DRIVER_PYTHON=python3 \
     SDP_DEMO_DIR=/home/jovyan/demos/sdp-medallion \
-    ORDERS_PATH=s3a://uc-quickstart-207734640204-usw2/medallion-demo/raw/orders \
-    DIMS_PATH=s3a://uc-quickstart-207734640204-usw2/medallion-demo/raw/dimensions \
-    MEDALLION_WAREHOUSE=s3://uc-quickstart-207734640204-usw2/warehouse/medallion \
     MEDALLION_MAX_ROWS=50000
 
 WORKDIR /home/jovyan

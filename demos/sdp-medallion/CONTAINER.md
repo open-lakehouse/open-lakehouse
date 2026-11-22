@@ -65,4 +65,5 @@ gold.brand_summary (top brands by revenue):
   can't target a remote Connect server - it spawns its own local Spark).
 - To re-stage the raw data (one-time, already done): upload
   `lakehouse-stack/data/events/orders_7d.parquet` and `data/dimensions/*.parquet`
-  to `s3://uc-quickstart-207734640204-usw2/medallion-demo/raw/{orders,dimensions}/`.
+  to `s3://<your-bucket>/medallion-demo/raw/{orders,dimensions}/` (the bucket
+  you pass as `MEDALLION_RAW`, or as `data_bucket` to `terraform-notebooks`).

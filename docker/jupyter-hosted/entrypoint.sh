@@ -7,7 +7,7 @@
 set -euo pipefail
 
 : "${UC_TOKEN:=not_used}"
-: "${MEDALLION_WAREHOUSE:=s3://uc-quickstart-207734640204-usw2/warehouse/medallion}"
+: "${MEDALLION_WAREHOUSE:=}"
 : "${DEMO_NS:=}"
 : "${SDP_DEMO_DIR:=/home/jovyan/demos/sdp-medallion}"
 export UC_TOKEN MEDALLION_WAREHOUSE

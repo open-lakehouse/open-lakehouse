@@ -28,9 +28,13 @@ variable "aws_profile" { default = "open-lakehouse" }
 variable "vpc_id" { default = "vpc-0920799a28d2be599" }
 variable "domain" { default = "openlakehousedemos.dev" }
 variable "image_uri" {
-  default = "207734640204.dkr.ecr.us-west-2.amazonaws.com/openlakehouse/notebooks:latest"
+  description = "Notebook image. Empty = <your account>.dkr.ecr.<region>.amazonaws.com/openlakehouse/notebooks:latest"
+  default     = ""
 }
-variable "data_bucket" { default = "uc-quickstart-207734640204-usw2" }
+variable "data_bucket" {
+  description = "Bucket holding the medallion raw data. Empty = uc-quickstart-<your account>-usw2"
+  default     = ""
+}
 variable "uc_token" {
   type      = string
   sensitive = true # the UC bearer JWT; pass via -var or tfvars (gitignored)
@@ -64,7 +68,11 @@ data "aws_route53_zone" "dev" {
 }
 
 locals {
-  bucket_arn = "arn:aws:s3:::${var.data_bucket}"
+  # Account-specific names are derived at plan time, never committed.
+  account_id  = data.aws_caller_identity.me.account_id
+  image_uri   = var.image_uri != "" ? var.image_uri : "${local.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/openlakehouse/notebooks:latest"
+  data_bucket = var.data_bucket != "" ? var.data_bucket : "uc-quickstart-${local.account_id}-usw2"
+  bucket_arn  = "arn:aws:s3:::${local.data_bucket}"
 }
 
 # ── secret: UC token ────────────────────────────────────────────────────────
@@ -212,15 +220,15 @@ resource "aws_ecs_task_definition" "p" {
 
   container_definitions = jsonencode([
     {
-      name      = "jupyter"
-      image     = var.image_uri
-      essential = true
+      name         = "jupyter"
+      image        = local.image_uri
+      essential    = true
       portMappings = [{ containerPort = 8889, protocol = "tcp" }]
       environment = [
         { name = "DEMO_NS", value = "${each.key}_" },
         { name = "JUPYTER_TOKEN", value = each.key },
-        { name = "ORDERS_PATH", value = "s3a://${var.data_bucket}/medallion-demo/raw/orders" },
-        { name = "DIMS_PATH", value = "s3a://${var.data_bucket}/medallion-demo/raw/dimensions" },
+        { name = "ORDERS_PATH", value = "s3a://${local.data_bucket}/medallion-demo/raw/orders" },
+        { name = "DIMS_PATH", value = "s3a://${local.data_bucket}/medallion-demo/raw/dimensions" },
         { name = "MEDALLION_MAX_ROWS", value = "300000" },
       ]
       secrets = [

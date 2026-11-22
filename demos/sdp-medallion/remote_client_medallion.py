@@ -8,12 +8,14 @@ the real ``spark-pipelines`` runtime (which spawns its own local Spark), this
 submits every stage to Scott's hosted Spark Connect server, so all compute runs
 on the remote cluster. Outputs are Delta tables registered in Unity Catalog.
 
-Data source: real food-delivery order events staged in S3
-  s3a://uc-quickstart-207734640204-usw2/medallion-demo/raw/{orders,dimensions}/
+Data source: real food-delivery order events staged in S3 under
+  $MEDALLION_RAW/{orders,dimensions}/
+e.g. MEDALLION_RAW=s3a://<your-bucket>/medallion-demo/raw
 
 Token: $UC_TOKEN or ~/.uc_token (a valid UC bearer JWT).
 
 Run:
+  export MEDALLION_RAW=s3a://<your-bucket>/medallion-demo/raw
   python3 demos/sdp-medallion/remote_client_medallion.py          # build all
   python3 demos/sdp-medallion/remote_client_medallion.py --show   # read-only peek
 """
@@ -41,7 +43,9 @@ from pyspark.sql.types import (
 REMOTE = "sc://connect.openlakehousedemos.dev:443/;use_ssl=true"
 UC_URI = "https://uc.openlakehousedemos.dev"
 CATALOG = "unity"
-RAW = "s3a://uc-quickstart-207734640204-usw2/medallion-demo/raw"
+# Where the raw parquet is staged. Deliberately no default: the bucket name is
+# account-specific and must not be committed.
+RAW = os.environ.get("MEDALLION_RAW", "").rstrip("/")
 
 
 # --------------------------------------------------------------------------- #
@@ -324,6 +328,8 @@ def define(p: Pipeline) -> None:
 # --------------------------------------------------------------------------- #
 def main() -> None:
     show_only = "--show" in sys.argv
+    if not RAW and not show_only:
+        sys.exit("Set $MEDALLION_RAW, e.g. s3a://<your-bucket>/medallion-demo/raw")
     spark = session(load_token())
     print(f"connected: {REMOTE}")
     print("catalogs:", [r[0] for r in spark.sql("SHOW CATALOGS").collect()])
