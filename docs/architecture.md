@@ -75,7 +75,7 @@ UC OSS persists its catalog metadata in a PostgreSQL database (`unitycatalog` sc
 - **Credential vending.** UC can mint short-lived S3 credentials per request; clients don't ship hardcoded keys.
 - **Engine neutrality (reads).** UC OSS exposes an Iceberg REST endpoint, so
   DuckDB, Trino, PyIceberg, etc. can read UC-registered tables without Spark.
-  Note the write side is **Delta-only**: UC OSS (0.4.x and 0.5.0 alike) rejects
+  Note the write side is **Delta-only**: UC OSS (0.4.x and 0.6.0 alike) rejects
   `data_source_format=ICEBERG` and its Iceberg REST adapter is read-only, so
   Delta is the write format on this stack and Iceberg is a cross-engine *read*
   surface. Hudi is not supported. (UniForm — Delta writing Iceberg-readable
@@ -180,7 +180,7 @@ A `--spark-local` flag exists on the CLI as a forward-compat stub for an eventua
 | Hadoop | 3.4.1 | Bundled in Spark image |
 | AWS SDK v2 | 2.24.6 | Exact match for Hadoop 3.4.1 |
 | Airflow | 3.1.6 | Breaking changes from 2.x — see airflow-3 skill |
-| Unity Catalog OSS | 0.5.0 | Catalog-managed Delta, Iceberg REST (read-only) |
+| Unity Catalog OSS | 0.6.0 | Catalog-managed Delta, Iceberg REST (read-only) |
 | MLflow | 3.1 | AI Gateway needs ≥ 3.0 |
 
 Don't change these without testing both the connectivity suite and at least one streaming demo end-to-end.

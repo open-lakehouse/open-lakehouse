@@ -7,7 +7,7 @@ name: Version matrix (T4)
 # stale and a human must reconcile docs/testing.md before the pin can move.
 #
 # Delta is the canonical case: 4.3.1 is the pin, and 4.2.0 cannot do
-# catalog-managed Delta through the UC 0.5.x connector. Each leg swaps its Delta
+# catalog-managed Delta through the UC 0.6.x connector. Each leg swaps its Delta
 # onto the live classpath, brings up Spark + Unity Catalog, and runs two gates:
 #   I-02  path-based Delta write/append/read/time-travel (the stack is healthy)
 #   I-45  catalog-managed Delta through UCSingleCatalog (what the pin protects)

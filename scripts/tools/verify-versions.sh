@@ -76,7 +76,7 @@ CORE="\
 iceberg-spark-runtime-4.0_2.13-|yes
 delta-spark_2.13-|yes
 delta-storage-|no
-unitycatalog-spark_2.13-|yes
+unitycatalog-spark_4.1_2.13-|yes
 unitycatalog-client-|yes
 unitycatalog-hadoop-|yes
 hadoop-aws-|no
@@ -108,7 +108,7 @@ EOF
 # --- Forbidden versions / catalog paths in SHIPPED CONFIG (never prose) ------
 # CLAUDE.md is intentionally excluded: golden rule #1 *quotes* the JDBC keys as
 # the anti-pattern to forbid, so finding them there is correct, not a defect.
-FORBIDDEN_JAR="delta-spark_2.13-4.2.0 delta-spark_2.13-4.3.0 delta-storage-4.2.0 delta-storage-4.3.0 unitycatalog-spark_2.13-0.3.0 unitycatalog-client-0.3.0 unitycatalog-hadoop-0.3.0"
+FORBIDDEN_JAR="delta-spark_2.13-4.2.0 delta-spark_2.13-4.3.0 delta-storage-4.2.0 delta-storage-4.3.0 unitycatalog-spark_4.1_2.13-0.3.0 unitycatalog-spark_2.13-0.3.0 unitycatalog-client-0.3.0 unitycatalog-hadoop-0.3.0"
 FORBIDDEN_CAT="spark.sql.catalog.iceberg.type=jdbc .jdbc.user .jdbc.password"
 
 scan_forbidden() {  # $1 = file, rest = tokens

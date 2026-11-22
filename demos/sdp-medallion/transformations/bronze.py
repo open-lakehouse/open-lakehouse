@@ -23,7 +23,7 @@ MAX_ROWS = int(os.environ.get("MEDALLION_MAX_ROWS", "200000"))
 # Catalog-managed Delta: the feature flag makes UC assign the location under the
 # catalog's storage_root (no explicit `location`); UC's managed-table API also
 # REQUIRES both delta.checkpoint.writeStats* properties (createTable 400s without
-# them). Verified on Delta 4.3.1 + the UC 0.5.x connector family (PR #13 / I-45).
+# them). Verified on Delta 4.3.1 + the UC 0.6.x connector family (PR #13 / I-45).
 _PROPS = {
     "provider": "delta",
     "delta.feature.catalogManaged": "supported",
