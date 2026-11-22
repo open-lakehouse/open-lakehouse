@@ -16,7 +16,7 @@ import { cappedTimeout } from "@/lib/exec";
  * - Consider sandboxing the execution environment
  */
 
-const JUPYTER_URL = () => process.env.JUPYTER_URL || "http://jupyter:8888";
+const JUPYTER_URL = () => process.env.JUPYTER_URL || "http://jupyter:8889";
 const JUPYTER_TOKEN = () => requireEnv("JUPYTER_TOKEN");
 
 function wsUrl(): string {
