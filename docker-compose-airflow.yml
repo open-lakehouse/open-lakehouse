@@ -6,7 +6,7 @@ x-airflow-common:
     args:
       PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
       PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-}
-      SPARK_DIST_URL: ${SPARK_DIST_URL:-https://archive.apache.org/dist/spark/spark-4.1.0/spark-4.1.0-bin-hadoop3.tgz}
+      SPARK_DIST_URL: ${SPARK_DIST_URL:-}
   env_file:
     - path: .env
       required: false
@@ -20,7 +20,7 @@ x-airflow-common:
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     # Airflow 3.x uses API server instead of webserver
     AIRFLOW__API__PORT: 8085
-    AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     # Spark connection settings
     SPARK_MASTER_41: spark://spark-master-41:7078
@@ -50,6 +50,7 @@ services:
     command:
       - -c
       - |
+        set -euo pipefail
         # Create Airflow database if it doesn't exist
         PGPASSWORD=${POSTGRES_PASSWORD} psql -h postgres -U ${POSTGRES_USER} -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'airflow'" | grep -q 1 || \
         PGPASSWORD=${POSTGRES_PASSWORD} psql -h postgres -U ${POSTGRES_USER} -d postgres -c "CREATE DATABASE airflow"
@@ -58,7 +59,7 @@ services:
         airflow db migrate
 
         # Create admin user if it doesn't exist
-        airflow users list | grep -q "${AIRFLOW_ADMIN_USER:-admin}" || \
+        airflow users list --output json | python -c 'import json, sys; sys.exit(0 if any(u["username"] == sys.argv[1] for u in json.load(sys.stdin)) else 1)' "${AIRFLOW_ADMIN_USER:-admin}" || \
         airflow users create \
           --username ${AIRFLOW_ADMIN_USER:-admin} \
           --password ${AIRFLOW_ADMIN_PASSWORD:-admin} \
@@ -105,6 +106,18 @@ services:
     command: triggerer
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: airflow-dag-processor
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
       interval: 30s
       timeout: 10s
       retries: 5
